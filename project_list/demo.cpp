@@ -1,7 +1,6 @@
 #include <cstring>
 #include <iostream>
 #include <cstdio>
-#include <pthread.h>
 using namespace std;
 const int list_max_len = 1e6;
 const int char_max_len = 1e2;
@@ -37,7 +36,7 @@ class list {
 			head = NULL;
 			capacity = list_max_len;
 		}
-
+		// 考虑类的拷情况
 		~list () {
 			node *p, *pre;
 			pre = head;
