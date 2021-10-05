@@ -1,3 +1,16 @@
+# mac系统文件
 .DS_Store
-*.out
+
+# vscode 系统文件
 .vscode/
+
+# gcc编译文件
+*.dSYM
+*.out
+
+# 执行文件
+main
+demo
+demo[0-9]$
+
+# 作业题

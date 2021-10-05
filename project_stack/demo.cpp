@@ -37,7 +37,7 @@ class myStack {
 		void push (T const& elem) {
 			base[++top] = elem;
 		}
-
+    
 		void pop () {
 			if (!empty()) top--;
 		}
