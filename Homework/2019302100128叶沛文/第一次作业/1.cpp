@@ -1,8 +1,8 @@
 /* 
  * author: wenwenziy
  * title: 动态向量实现1-a,b,c,d,e,f,g,h
- * class: myVector
  * last edited: 2021-10-09
+ * class: myVector
  * functions and features: 见注释
  * warning: 虽然使用了模板类，但部分函数是默认按int来处理的
  * （如输入和输出部分），故还不能其他类型作为vector的参数
@@ -139,6 +139,7 @@ class myVector {
     //a. vector 初始化并创建一个空表，容量为cap
     void init (const int &cap, int key = 0) {
       capacity = cap;
+			len = cap;
       base = new T[cap];
       if(key) for (int i = 0; i < cap; i++) 
         base[i] = key;
@@ -160,13 +161,13 @@ class myVector {
     }
     //e. 返回 vector 中第 pos 个元素的值
     T check_item (const int &pos) {
-      if (!empty() && len >= pos)
+      if (!empty() && pos > 0 && len >= pos)
         return base[pos-1];
       throw "myVector::pos out of range";
     }
     //f. 插入元素 value 到指定位置 pos
     void insert_item (const int &pos, const int &key) {
-      if (len+1 >= pos) {
+      if (len+1 >= pos && pos > 0) {
         if (len+1 >= capacity) update_cap();
         for (int i = len; i >= pos; i--)
           base[i] = base[i-1];

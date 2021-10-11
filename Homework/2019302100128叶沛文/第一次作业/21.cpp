@@ -1,6 +1,7 @@
 /*
  * author: wenwenziy
  * title: 数组去重(大于2次出现)
+ * last edited: 2021-10-11
  * run case: 见注释
  * function: unique_arr, sort
  * method: 快慢指针法,便于本地修改数组节省空间

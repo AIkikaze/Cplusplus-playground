@@ -1,6 +1,7 @@
 /*
  * author: wenwenziy
  * title: 利用向量和队列解决 Joseph 问题
+ * last edited: 2021-10-10
  * question: 见维基百科 Joseph 问题
  * initial value: 问题初值
  * 人数为 n, 跳跃人数为 m, 起点为 sta

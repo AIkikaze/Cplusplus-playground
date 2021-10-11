@@ -1,8 +1,8 @@
 /* 
  * author: wenwenziy
  * title: 双向循环链表实现2-a,b,c,d,e,f
- * class: myList, myListnode
  * last edited: 2021-10-08
+ * class: myList, myListnode
  * functions and features: 见注释
  * warning: myListnode仅对友元开放private变量的访问权限
  * 如果myListNode中无public，那么myListNode将仅在myList

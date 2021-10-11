@@ -1,8 +1,8 @@
 /* 
  * author: wenwenziy
  * title: 循环队列实现5
- * class: 无封装,数组实现
  * last edited: 2021-10-08
+ * class: 无封装,数组实现
  * functions and features: 见注释
  */
 #include <iostream>

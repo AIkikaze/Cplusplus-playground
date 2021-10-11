@@ -1,6 +1,7 @@
 /*
  * author: wenwenziy
  * title: 中缀转后缀并计算10
+ * last edited: 2021-10-10
  * class: 数组模拟栈
  */
 #include <cstring>
