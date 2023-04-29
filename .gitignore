@@ -12,6 +12,7 @@
 main
 demo
 demo[0-9]$
+answer_\d+
 
 # 作业文件
 Homework/
