@@ -1,8 +1,6 @@
 /*
- *
- *
- *
- *
+ * author: wenwenziy
+ * title: 洛谷P1175
  */
 #include <cstring>
 #include <iostream>

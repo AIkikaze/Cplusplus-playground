@@ -5,5 +5,3 @@ int main () {
 	L.setup();
 	return 0;
 }
-
-

@@ -29,7 +29,8 @@
 - [链表](./project_list/readme.md)
 - [栈结构](./project_stack/readme.md)
 - [排序算法](./project_sort/readme.md)
-
+- [树结构](./project_tree/readme.md)
+- [图结构](./project_graph/readme.md)
 
 ## 考试
 
@@ -65,4 +66,4 @@
 ### 算法设计题 2*10
 
 1. 利用栈实现，表达式的转换，回文字符 （直接调用函数就可以啦，不需要关心它怎么实现的）
-2. 看上去很简单，
+2. 看上去很简单，注意细节就行。
