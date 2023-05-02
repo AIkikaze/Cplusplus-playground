@@ -1,6 +1,6 @@
 # 问题 01-10
 
-# 问题 03 大津算法 Ostu's method
+# 问题 04 大津算法 Ostu's method
 
 大津二值化法用来确定灰度阈值以对图像进行二值化，这一方法假定图像根据双模直方图（前景像素和背景像素）把包含两类像素，于是它要计算能将两类分开的最佳阈值，使得它们的**类内方差**最小。由于两两平方距离恒定，所以即它们的**类间方差**最大。
 
@@ -75,5 +75,101 @@ $$
   3.4. 记录最后一次取到最大方差的灰度值 Tstar_r
 4. 对两次记录下的灰度值 Tstar_l 和 Tstar_r 取平均值即为理想的二值化阈值 Tstar
 ```
+
+## 问题 05 
+
+## 问题五：$\text{HSV}$变换
+
+将使用$\text{HSV}$表示色彩的图像的色相反转吧！
+
+$\text{HSV}$即使用**色相（Hue）、饱和度（Saturation）、明度（Value）**来表示色彩的一种方式。
+
+- 色相：将颜色使用$0^{\circ}$到$360^{\circ}$表示，就是平常所说的颜色名称，如红色、蓝色。色相与数值按下表对应：
+
+  | 红          | 黄           | 绿            | 青色          | 蓝色          | 品红          | 红            |
+  | ----------- | ------------ | ------------- | ------------- | ------------- | ------------- | ------------- |
+  | $0^{\circ}$ | $60^{\circ}$ | $120^{\circ}$ | $180^{\circ}$ | $240^{\circ}$ | $300^{\circ}$ | $360^{\circ}$ |
+
+- 饱和度：是指色彩的纯度，饱和度越低则颜色越黯淡（$0\leq S < 1$）；
+- 明度：即颜色的明暗程度。数值越高越接近白色，数值越低越接近黑色（$0\leq V < 1$）；
+
+从$\text{RGB}$色彩表示转换到$\text{HSV}$色彩表示通过以下方式计算：
+
+$\text{RGB}$的取值范围为$[0, 255]$，令：
+$$
+\text{Max}=\max(R,G,B)\\
+\text{Min}=\min(R,G,B)
+$$
+色相：
+$$
+H=\begin{cases}
+0&(\text{if}\ \text{Min}=\text{Max})\\
+60\  \frac{G-R}{\text{Max}-\text{Min}}+60&(\text{if}\ \text{Min}=B)\\
+60\  \frac{B-G}{\text{Max}-\text{Min}}+180&(\text{if}\ \text{Min}=R)\\
+60\  \frac{R-B}{\text{Max}-\text{Min}}+300&(\text{if}\ \text{Min}=G)
+\end{cases}
+$$
+饱和度：
+$$
+S=\text{Max}-\text{Min}
+$$
+明度：
+$$
+V=\text{Max}
+$$
+从$\text{HSV}$色彩表示转换到$\text{RGB}$色彩表示通过以下方式计算：
+$$
+C = S\\
+H' = \frac{H}{60}\\
+X = C\  (1 - |H' \mod 2 - 1|)\\
+(R,G,B)=(V-C)\ (1,1,1)+\begin{cases}
+(0, 0, 0)&  (\text{if H is undefined})\\
+(C, X, 0)&  (\text{if}\quad 0 \leq H' < 1)\\
+(X, C, 0)&  (\text{if}\quad 1 \leq H' < 2)\\
+(0, C, X)&  (\text{if}\quad 2 \leq H' < 3)\\
+(0, X, C)&  (\text{if}\quad 3 \leq H' < 4)\\
+(X, 0, C)&  (\text{if}\quad 4 \leq H' < 5)\\
+(C, 0, X)&  (\text{if}\quad 5 \leq H' < 6)
+\end{cases}
+$$
+请将色相反转（色相值加$180$），然后再用$\text{RGB}$色彩空间表示图片。
+
+## 问题 09 高斯滤波
+
+使用高斯滤波器（$3\times3$大小，标准差$\sigma=1.3$）来对`imori_noise.jpg`进行降噪处理吧！
+
+高斯滤波器是一种可以使图像**平滑**的滤波器，用于去除**噪声**。可用于去除噪声的滤波器还有中值滤波器（参见问题十），平滑滤波器（参见问题十一）、LoG滤波器（参见问题十九）。
+
+高斯滤波器将中心像素周围的像素按照高斯分布加权平均进行平滑化。这样的（二维）权值通常被称为**卷积核（kernel）**或者**滤波器（filter）**。
+
+但是，由于图像的长宽可能不是滤波器大小的整数倍，因此我们需要在图像的边缘补$0$。这种方法称作**Zero Padding**。并且权值$g$（卷积核）要进行[归一化操作](https://blog.csdn.net/lz0499/article/details/54015150)（$\sum\ g = 1$）。
+
+按下面的高斯分布公式计算权值：
+$$
+g(x,y,\sigma)=\frac{1}{2\  \pi\ \sigma^2}\  e^{-\frac{x^2+y^2}{2\  \sigma^2}}
+$$
+
+标准差$\sigma=1.3$的$8-$近邻的常用高斯滤波器如下：
+$$
+K=\frac{1}{16}\  \left[
+ \begin{matrix}
+   1 & 2 & 1 \\
+   2 & 4 & 2 \\
+   1 & 2 & 1
+  \end{matrix}
+  \right]
+$$
+
+实际计算得到的高斯滤波器如下：
+$$
+K=\frac{1}{16}\  \left[
+ \begin{matrix}
+   1.43059 & 1.92311 & 1.43059 \\
+   1.92311 & 2.5852 & 1.92311 \\
+   1.43059 & 1.92311 & 1.43059
+  \end{matrix}
+  \right]
+$$
+
 
 [^3]: Ping-Sung Liao and Kse-Sheng Chen and Pau-Choo Chung. A Fask Algorikhm for Mulkilevel Khresholding. J. Inf. Sci. Eng. 2001, 17 (5): 713–727.

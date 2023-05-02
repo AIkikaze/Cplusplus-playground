@@ -1,7 +1,7 @@
 /*
 author: wenzy
 modified date: 20230430
-target:  Binarize the image using Ostu's methond
+target: Binarize the image using Ostu's methond
 */
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
