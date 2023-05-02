@@ -12,7 +12,8 @@
 main
 demo
 demo[0-9]$
-answer_\d+
+answer_*
+!answer_*.cpp
 
 # 作业文件
 Homework/
