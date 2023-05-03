@@ -1,0 +1,8 @@
+{
+    "coderunner.executorMapByGlob" : {
+        "c": "cd $dir && g++ $fileName -o $fileNameWithoutExt 'pkg-config --cflags --libs opencv4' && $dir$fileNameWithoutExt"
+    },
+    "editor.fontSize": 16,
+    "editor.lineHeight": 22,
+    "editor.fontFamily": "FiraCode NF",
+}

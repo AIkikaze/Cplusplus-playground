@@ -1,9 +1,6 @@
 # mac系统文件
 .DS_Store
 
-# vscode 系统文件
-.vscode/
-
 # gcc编译文件
 *.dSYM
 *.out
