@@ -16,7 +16,7 @@ double getGrayValue(Vec3b &pixel) {
   return 0.2126 * pixel[2] + 0.7152 * pixel[1] + 0.0722 * pixel[0];
 }
 
-Mat differentialFilter(Mat &I) {
+Mat prewittFilter(Mat &I) {
   int n_row = I.rows;
   int n_col = I.cols;
   unique_ptr<int[]> kernel(new int [9]);
@@ -53,9 +53,9 @@ Mat differentialFilter(Mat &I) {
 
 int main() {
   Mat img = imread("../imagelib/imori.jpg", IMREAD_COLOR);
-  Mat A = differentialFilter(img);
+  Mat A = prewittFilter(img);
   imshow("before", img);
-  imshow("differentialFilter", A);
+  imshow("prewittFilter", A);
   waitKey();
   return 0;
 }

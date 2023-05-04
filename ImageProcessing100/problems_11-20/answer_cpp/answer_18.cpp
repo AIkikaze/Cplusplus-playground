@@ -16,7 +16,7 @@ double getGrayValue(Vec3b &pixel) {
   return 0.2126 * pixel[2] + 0.7152 * pixel[1] + 0.0722 * pixel[0];
 }
 
-Mat laplacianFilter(Mat &I) {
+Mat embossFilter(Mat &I) {
   int n_row = I.rows;
   int n_col = I.cols;
   unique_ptr<int[]> kernel(new int [9]);
@@ -24,15 +24,16 @@ Mat laplacianFilter(Mat &I) {
   unique_ptr<int[]> dy(new int [9]);
   Mat T = Mat::zeros(n_row, n_col, CV_8U);
 
-  // 初始化 Prewitt kernel 和位移增量
-  int vecx[] = {1, 0, -1};
-  int vecy[] = {1, 1, 1};
+  // 初始化 Emboss kernel 和位移增量
+  int vec[] = {-2, -1, 0};
   for (int i = 0; i < 3; i++)
       for (int j = 0; j < 3; j++) {
           int _idx = i * 3 + j;
           dy[_idx] = -1 + j;
           dx[_idx] = -1 + i;
-          kernel[_idx] = vecx[j] * vecy[i];
+          kernel[_idx] = vec[j] + i;
+          if(!dx[_idx] && !dy[_idx]) 
+            kernel[_idx]++;
       }
 
   // padding 滤波计算
@@ -53,9 +54,9 @@ Mat laplacianFilter(Mat &I) {
 
 int main() {
   Mat img = imread("../imagelib/imori.jpg", IMREAD_COLOR);
-  Mat A = laplacianFilter(img);
+  Mat A = embossFilter(img);
   imshow("before", img);
-  imshow("laplacianFilter", A);
+  imshow("embossFilter", A);
   waitKey();
   return 0;
 }
