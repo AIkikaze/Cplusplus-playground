@@ -87,13 +87,13 @@ $$
 另外需要注意的是, Ostu方法和fihser线性判别有系数上的不同: 一维二分类情形下由fisher判别式所确定的阈值满足
 
 $$
-T_{\text {fisher }}^*=argmax_T \frac{\left(\mu_0-\mu_1\right)^2}{\sigma_0^2+\sigma_1^2}
+T_{fisher}^*=argmax_T \frac{\left(\mu_0-\mu_1\right)^2}{\sigma_0^2+\sigma_1^2}
 $$
 
 而 Ostu方法确定的阈值满足(其中需要将(5)式代入  $s_{inter}^2$  中展开计算)
 
 $$
-T_{o s t u}^*=argmax_T \frac{w_0 w_1\left(\mu_0-\mu_1\right)^2}{w_0 \sigma_0^2+w_1 \sigma_1^2}
+T_{ostu}^*=argmax_T \frac{w_0 w_1\left(\mu_0-\mu_1\right)^2}{w_0 \sigma_0^2+w_1 \sigma_1^2}
 $$
 
 下面, 我们简述算法实现的流程:
