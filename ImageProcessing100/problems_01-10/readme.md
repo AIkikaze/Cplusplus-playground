@@ -1,6 +1,3 @@
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css" integrity="sha384-AbJlzz/xZ7z1fRlY+X9s+1TtAnvHxW+LBojQgsO9AXFjRLvngdWpy+8YcRWjV7+l" crossorigin="anonymous">
-<script src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js" integrity="sha384-5j5N5xgkL8PdH56QKhsM1XnNGufv/B8WixBejgvfQNuw+pzxnqh6v5LPr7ce4y4G" crossorigin="anonymous"></script>
-
 # 问题 01-10
 
 ## 问题 01 通道交换 Channel Swap
@@ -53,12 +50,11 @@ $$
 特别地，对于确定二值化阈值的问题，分类器  $class(i)$  可以写成
 
 $$ 
-class(i, T) = \left\{
-\begin{align*}
- & 0, \ 0 \leq i < T \\ 
- & 1, \ T \leq i < 256 
-\end{align*}
-\right.
+class(i, T) = \left\{ 
+  \begin{align*}
+  & 0, \ 0 \leq i < T \\ 
+  & 1, \ T \leq i < 256 
+  \end{align*} \right.
 $$ 
 
 我们的目标是找到最合适的二值化阈值 $T^*$ ，使得下式尽可能小：
@@ -88,17 +84,17 @@ $$
 一维二分类情形下由fisher判别式所确定的阈值满足
 
 $$ 
-\begin{equation}
-  T^*_{fisher} = argmax_{T} \  \frac{(\mu_0 - \mu_1)^2}{\sigma_0^2 + \sigma_1^2}
-\end{equation}
+\begin{gather}
+T^*_{fisher} = argmax_{T} \  \frac{(\mu_0 - \mu_1)^2}{\sigma_0^2 + \sigma_1^2}
+\end{gather}
 $$ 
 
 而 Ostu方法确定的阈值满足（其中需要将(5)式代入  $s_{inter}^2$  中展开计算）
 
 $$ 
-\begin{equation}
-  T^*_{ostu} = argmax_{T} \  \frac{w_0w_1(\mu_0 - \mu_1)^2}{w_0\sigma_0^2 + w_1\sigma_1^2} 
-\end{equation}
+\begin{gather}
+T^*_{ostu} = argmax_{T} \  \frac{w_0w_1(\mu_0 - \mu_1)^2}{w_0\sigma_0^2 + w_1\sigma_1^2} 
+\end{gather}
 $$ 
 
 下面，我们简述算法实现的流程：
