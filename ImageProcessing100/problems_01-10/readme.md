@@ -85,13 +85,17 @@ $$
 一维二分类情形下由fisher判别式所确定的阈值满足
 
 $$ 
-T^*_{fisher} = argmax_{T} \ \frac{(\mu_0 - \mu_1)^2}{\sigma_0^2 + \sigma_1^2}
+\begin{equation}
+  T^*_{fisher} = argmax_{T} \ \frac{(\mu_0 - \mu_1)^2}{\sigma_0^2 + \sigma_1^2}
+\end{equation}
 $$ 
 
 而 Ostu方法确定的阈值满足（其中需要将(5)式代入  $s_{inter}^2$  中展开计算）
 
 $$ 
-T^*_{ostu} = argmax_{T} \ \frac{w_0w_1(\mu_0 - \mu_1)^2}{w_0\sigma_0^2 + w_1\sigma_1^2} 
+\begin{equation}
+  T^*_{ostu} = argmax_{T} \ \frac{w_0w_1(\mu_0 - \mu_1)^2}{w_0\sigma_0^2 + w_1\sigma_1^2} 
+\end{equation}
 $$ 
 
 下面，我们简述算法实现的流程：
