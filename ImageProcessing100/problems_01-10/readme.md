@@ -50,11 +50,11 @@ $$
 特别地，对于确定二值化阈值的问题，分类器  $class(i)$  可以写成
 
 $$ 
-class(i, T) = \left\{ 
-  \begin{align*}
+class(i, T) =   
+  \begin{cases}
   & 0, \ 0 \leq i < T \\ 
   & 1, \ T \leq i < 256 
-  \end{align*} \right.
+  \end{cases} 
 $$ 
 
 我们的目标是找到最合适的二值化阈值 $T^*$ ，使得下式尽可能小：
@@ -85,7 +85,7 @@ $$
 
 $$ 
 \begin{gather}
-T^*_{fisher} = argmax_{T} \  \frac{(\mu_0 - \mu_1)^2}{\sigma_0^2 + \sigma_1^2}
+T^*_{fisher} = \argmax_{T} \  \frac{(\mu_0 - \mu_1)^2}{\sigma_0^2 + \sigma_1^2}
 \end{gather}
 $$ 
 
@@ -93,7 +93,7 @@ $$
 
 $$ 
 \begin{gather}
-T^*_{ostu} = argmax_{T} \  \frac{w_0w_1(\mu_0 - \mu_1)^2}{w_0\sigma_0^2 + w_1\sigma_1^2} 
+T^*_{ostu} = \argmax_{T} \  \frac{w_0w_1(\mu_0 - \mu_1)^2}{w_0\sigma_0^2 + w_1\sigma_1^2} 
 \end{gather}
 $$ 
 
