@@ -86,15 +86,11 @@ $$
 
 另外需要注意的是, Ostu方法和fihser线性判别有系数上的不同: 一维二分类情形下由fisher判别式所确定的阈值满足
 
-$$
-T^{*}_{fisher} = argmax_{T} \  \frac{( \mu_0 - \mu_1 )^2}{ \sigma_{0}^{2} + \sigma_{1}^{2} } 
-$$ 
+$$ T^{*}_{fisher} = argmax_{T} \  \frac{( \mu_0 - \mu_1 )^2}{ \sigma_{0}^{2} + \sigma_{1}^{2} } $$ 
 
 而 Ostu方法确定的阈值满足(其中需要将(5)式代入  $s_{inter}^2$  中展开计算)
 
-$$ 
-T^{*}_{ostu} = argmax_{T} \  \frac{ w_0 w_1( \mu_0 - \mu_1 )^2}{ w_0 \sigma_{0}^{2} + w_1 \sigma_{1}^{2} }
-$$ 
+$$ T^{*}_{ostu} = argmax_{T} \  \frac{ w_0 w_1( \mu_0 - \mu_1 )^2}{ w_0 \sigma_{0}^{2} + w_1 \sigma_{1}^{2} } $$ 
 
 下面, 我们简述算法实现的流程:
 
@@ -135,15 +131,7 @@ $$
 
 色相:
 
-$$ 
-H = 
-\begin{cases}
-  0 & (\text{if}\ \text{Min}=\text{Max}) \\
-  60 \frac{G-R}{\text{Max}-\text{Min}} + 60 &(\text{if}\ \text{Min}=B) \\
-  60 \frac{B-G}{\text{Max}-\text{Min}} + 180 & (\text{if}\ \text{Min}=R)\\
-  60 \frac{R-B}{\text{Max}-\text{Min}} + 300 &(\text{if}\ \text{Min}=G)
-\end{cases}
-$$ 
+$$ H = \begin{cases} 0 & (\text{if}\ \text{Min}=\text{Max}) \\ 60 \frac{G-R}{\text{Max}-\text{Min}} + 60 &(\text{if}\ \text{Min}=B) \\ 60 \frac{B-G}{\text{Max}-\text{Min}} + 180 & (\text{if}\ \text{Min}=R)\\ 60 \frac{R-B}{\text{Max}-\text{Min}} + 300 &(\text{if}\ \text{Min}=G) \end{cases} $$ 
 
 饱和度:
 
