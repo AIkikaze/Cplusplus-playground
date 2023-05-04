@@ -11,32 +11,35 @@ remove the noise of imori_noise.jpg .
 using namespace std;
 using namespace cv;
 
-inline
-uchar getGrayValue(Vec3b &pixel) {
-  return (uchar)( 0.2126 * pixel[2] + 0.7152 * pixel[1] + 0.0722 * pixel[0] );
+inline double getGrayValue(Vec3b &pixel)
+{
+  return 0.2126 * pixel[2] + 0.7152 * pixel[1] + 0.0722 * pixel[0];
 }
 
-Mat differentialFilter(Mat &I, int ORIENT[]) {
+Mat differentialFilter(Mat &I, int ORIENT[])
+{
   int n_row = I.rows;
   int n_col = I.cols;
-  unique_ptr<int[]> dx(new int [9]);
-  unique_ptr<int[]> dy(new int [9]);
+  unique_ptr<int[]> dx(new int[9]);
+  unique_ptr<int[]> dy(new int[9]);
   Mat T = Mat::zeros(n_row, n_col, CV_8U);
 
   // padding 滤波计算
-  for(int i = 0; i < n_row; i++)
-    for(int j = 0; j < n_col; j++) {
-        uchar _p0 = getGrayValue(I.at<Vec3b>(i, j));
-        uchar _p1 = getGrayValue(I.at<Vec3b>(i + ORIENT[0], j + ORIENT[1]));
-        T.at<uchar>(i, j) = abs(_p0 - _p1);
-      }
-  
+  for (int i = 0; i < n_row; i++)
+    for (int j = 0; j < n_col; j++)
+    {
+      double _p0 = getGrayValue(I.at<Vec3b>(i, j));
+      double _p1 = getGrayValue(I.at<Vec3b>(i + ORIENT[0], j + ORIENT[1]));
+      T.at<uchar>(i, j) = abs(_p0 - _p1);
+    }
+
   return T;
 }
 
-int main() {
-  Mat img = imread("../imagelib/imori.jpg", IMREAD_COLOR);
-  int orient[] = { -1, 0 };
+int main()
+{
+  Mat img = imread("imori.jpg", IMREAD_COLOR);
+  int orient[] = {-1, 0};
   Mat A = differentialFilter(img, orient);
   imshow("before", img);
   imshow("differentialFilter", A);
