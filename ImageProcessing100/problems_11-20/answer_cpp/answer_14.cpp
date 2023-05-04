@@ -16,7 +16,8 @@ double getGrayValue(Vec3b &pixel) {
   return 0.2126 * pixel[2] + 0.7152 * pixel[1] + 0.0722 * pixel[0];
 }
 
-Mat differentialFilter(Mat &I, int ORIENT[]) {
+Mat differentialFilter(Mat &I, int ORIENT[])
+{
   int n_row = I.rows;
   int n_col = I.cols;
   Mat T = Mat::zeros(n_row, n_col, CV_8U);
@@ -32,9 +33,10 @@ Mat differentialFilter(Mat &I, int ORIENT[]) {
   return T;
 }
 
-int main() {
+int main()
+{
   Mat img = imread("../imagelib/imori.jpg", IMREAD_COLOR);
-  int orient[] = { -1, 0 };
+  int orient[] = {-1, 0};
   Mat A = differentialFilter(img, orient);
   imshow("before", img);
   imshow("differentialFilter", A);
