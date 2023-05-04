@@ -79,18 +79,16 @@ $$
 
 其中最后一式需要计算检验。由于  $\sigma^2$  为定植，故原问题(1)可以等价于求最小的类内方差，或最大的类间方差。
 
-另外需要注意的是，Ostu方法和fihser线性判别有系数上的不同：
+另外需要注意的是，Ostu方法和fihser线性判别有系数上的不同：一维二分类情形下由fisher判别式所确定的阈值满足
 
-一维二分类情形下由fisher判别式所确定的阈值满足
-
-$$ 
-T^*_{fisher} = argmax_{T} \  \frac{(\mu_0 - \mu_1)^2}{\sigma_0^2 + \sigma_1^2}
+$$
+T^{*}_{fisher} = argmax_{T} \  \frac{( \mu_0 - \mu_1 )^2}{ \sigma_{0}^{2} + \sigma_{1}^{2} } 
 $$ 
 
 而 Ostu方法确定的阈值满足（其中需要将(5)式代入  $s_{inter}^2$  中展开计算）
 
 $$ 
-T^*_{ostu} = argmax_{T} \  \frac{w_0w_1(\mu_0 - \mu_1)^2}{w_0\sigma_0^2 + w_1\sigma_1^2} 
+T^{*}_{ostu} = argmax_{T} \  \frac{ w_0 w_1( \mu_0 - \mu_1 )^2}{ w_0 \sigma_{0}^{2} + w_1 \sigma_{1}^{2} }
 $$ 
 
 下面，我们简述算法实现的流程：
@@ -124,18 +122,21 @@ $$
 从 $\text{RGB}$ 色彩表示转换到 $\text{HSV}$ 色彩表示通过以下方式计算： $\text{RGB}$ 的取值范围为 $[0, 255]$ ，令：
 
 $$ 
-\text{Max}=\max(R, G, B)\\
-\text{Min}=\min(R, G, B)
+\begin{gather*}
+\text{Max} = \max(R, G, B) \\
+\text{Min} = \min(R, G, B)
+\end{gather*}
 $$ 
 
 色相：
 
 $$ 
-H=\begin{cases}
-0&(\text{if}\ \text{Min}=\text{Max})\\
-60\  \frac{G-R}{\text{Max}-\text{Min}}+60&(\text{if}\ \text{Min}=B)\\
-60\  \frac{B-G}{\text{Max}-\text{Min}}+180&(\text{if}\ \text{Min}=R)\\
-60\  \frac{R-B}{\text{Max}-\text{Min}}+300&(\text{if}\ \text{Min}=G)
+H = 
+\begin{cases}
+  0 & (\text{if}\ \text{Min}=\text{Max}) \\
+  60 \frac{G-R}{\text{Max}-\text{Min}} + 60 &(\text{if}\ \text{Min}=B) \\
+  60 \frac{B-G}{\text{Max}-\text{Min}} + 180 & (\text{if}\ \text{Min}=R)\\
+  60 \frac{R-B}{\text{Max}-\text{Min}} + 300 &(\text{if}\ \text{Min}=G)
 \end{cases}
 $$ 
 
@@ -154,18 +155,21 @@ $$
 从 $\text{HSV}$ 色彩表示转换到 $\text{RGB}$ 色彩表示通过以下方式计算：
 
 $$ 
-C = S\\
-H' = \frac{H}{60}\\
-X = C\  (1 - |H' \mod 2 - 1|)\\
-(R, G, B)=(V-C)\ (1, 1, 1)+\begin{cases}
-(0, 0, 0)&  (\text{if H is undefined})\\
-(C, X, 0)&  (\text{if}\quad 0 \leq H' < 1)\\
-(X, C, 0)&  (\text{if}\quad 1 \leq H' < 2)\\
-(0, C, X)&  (\text{if}\quad 2 \leq H' < 3)\\
-(0, X, C)&  (\text{if}\quad 3 \leq H' < 4)\\
-(X, 0, C)&  (\text{if}\quad 4 \leq H' < 5)\\
-(C, 0, X)&  (\text{if}\quad 5 \leq H' < 6)
-\end{cases}
+\begin{gather*}
+  C = S \\
+  H' = \frac{H}{60} \\
+  X = C\  (1 - |H' \mod 2 - 1|) \\
+  (R, G, B) = (V-C) \cdot (1, 1, 1) +
+  \begin{cases}
+    (0, 0, 0) &  (\text{if H is undefined}) \\
+    (C, X, 0) &  (\text{if}\quad 0 \leq H' < 1) \\
+    (X, C, 0) &  (\text{if}\quad 1 \leq H' < 2) \\
+    (0, C, X) &  (\text{if}\quad 2 \leq H' < 3) \\
+    (0, X, C) &  (\text{if}\quad 3 \leq H' < 4) \\
+    (X, 0, C) &  (\text{if}\quad 4 \leq H' < 5) \\
+    (C, 0, X) &  (\text{if}\quad 5 \leq H' < 6)
+  \end{cases}
+\end{gather*}
 $$ 
 
 请将色相反转（色相值加 $180$ ），然后再用 $\text{RGB}$ 色彩空间表示图片。
