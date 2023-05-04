@@ -134,7 +134,12 @@ $$
 
 色相:
 
-$$ H = \begin{cases} 0 & (\text{if}\ \text{Min}=\text{Max}) \\ 60 \frac{G-R}{\text{Max}-\text{Min}} + 60 &(\text{if}\ \text{Min}=B) \\ 60 \frac{B-G}{\text{Max}-\text{Min}} + 180 & (\text{if}\ \text{Min}=R)\\ 60 \frac{R-B}{\text{Max}-\text{Min}} + 300 &(\text{if}\ \text{Min}=G) \end{cases} $$ 
+$$ 
+H = \begin{cases} 0 & (\text{if}\ \text{Min}=\text{Max}) \\ 
+60 \frac{G-R}{\text{Max}-\text{Min}} + 60 &(\text{if}\ \text{Min}=B) \\ 
+60 \frac{B-G}{\text{Max}-\text{Min}} + 180 & (\text{if}\ \text{Min}=R) \\ 
+60 \frac{R-B}{\text{Max}-\text{Min}} + 300 &(\text{if}\ \text{Min}=G) \end{cases} 
+$$ 
 
 饱和度:
 
