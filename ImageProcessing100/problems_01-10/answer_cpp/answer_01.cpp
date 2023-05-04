@@ -27,6 +27,8 @@ int main() {
     Mat img = imread("../imagelib/test.jpeg", IMREAD_COLOR);
     // 调用函数
     Mat A = channelSwap(img);
+    // 写入图片
+    imwrite("../imagelib/test_channelSwap.jpg", A);
     // 在窗口 "hello" 中显示图片
     imshow("problem_01-channelSwap", A);     
     // 等待用户按下键盘

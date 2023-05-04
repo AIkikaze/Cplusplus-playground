@@ -26,6 +26,7 @@ Mat grayScale(Mat &I) {
 int main() {
   Mat img = imread("../imagelib/test.jpeg", IMREAD_COLOR);
   Mat A = grayScale(img);
+  imwrite("../imagelib/test_grayScale.jpg", A);
   imshow("grayScale", A);
   waitKey();
   return 0;
