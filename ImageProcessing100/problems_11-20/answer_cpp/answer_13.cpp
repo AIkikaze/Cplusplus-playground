@@ -36,10 +36,6 @@ Mat max_minFilter(Mat &I, Size S) {
         uchar _p_max = 0;
         uchar _p_min = 255;
         for(int _i = 0; _i < n_wid * n_hei; _i++) {
-          if(i + dx[_i] < 0 || i + dx[_i] >= n_row || j + dy[_i] < 0 || j + dy[_i] >= n_col) {
-            _p_min = 0;
-            continue;
-          }
           if(I.at<Vec3b>(i + dx[_i], j + dy[_i])[c] > _p_max)
             _p_max = I.at<Vec3b>(i + dx[_i], j + dy[_i])[c];
           if(I.at<Vec3b>(i + dx[_i], j + dy[_i])[c] < _p_min)

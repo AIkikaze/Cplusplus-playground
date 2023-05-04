@@ -5,6 +5,9 @@
 *.dSYM
 *.out
 
+# .vscode
+.vscode
+
 # 执行文件
 main
 demo
