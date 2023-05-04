@@ -5,11 +5,17 @@
 *.dSYM
 *.out
 
+# .vscode
+.vscode
+
+# gitignore
+.gitignore
+
 # 执行文件
 main
 demo
 demo[0-9]$
-answer_*
+answer_*.exe
 !answer_*.cpp
 !answer_cpp
 

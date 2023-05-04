@@ -32,7 +32,7 @@ Mat gaussianFilter(Mat &I, Size S, double SIGMA) {
       dy[_idx] = -(n_wid>>1) + j;
       dx[_idx] = -(n_hei>>1) + i;
       double xy2 = (double)dx[_idx] * dx[_idx] + (double)dy[_idx] * dy[_idx];
-      kernel[_idx] = exp( - xy2 / (2 * SIGMA * SIGMA) ) / ( 2 * M_PI );
+      kernel[_idx] = exp( - xy2 / (2 * SIGMA * SIGMA) ) / ( 2 * CV_PI * SIGMA * SIGMA );
       kernel_sum += kernel[_idx];
     }
   // 归一化处理
