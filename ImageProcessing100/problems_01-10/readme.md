@@ -86,11 +86,15 @@ $$
 
 另外需要注意的是, Ostu方法和fihser线性判别有系数上的不同: 一维二分类情形下由fisher判别式所确定的阈值满足
 
-$$ T^{*}_{fisher} = argmax_{T} \  \frac{( \mu_0 - \mu_1 )^2}{ \sigma_{0}^{2} + \sigma_{1}^{2} } $$ 
+$$
+T_{\text {fisher }}^*=argmax_T \frac{\left(\mu_0-\mu_1\right)^2}{\sigma_0^2+\sigma_1^2}
+$$
 
 而 Ostu方法确定的阈值满足(其中需要将(5)式代入  $s_{inter}^2$  中展开计算)
 
-$$ T^{*}_{ostu} = argmax_{T} \  \frac{ w_0 w_1( \mu_0 - \mu_1 )^2}{ w_0 \sigma_{0}^{2} + w_1 \sigma_{1}^{2} } $$ 
+$$
+T_{o s t u}^*=argmax_T \frac{w_0 w_1\left(\mu_0-\mu_1\right)^2}{w_0 \sigma_0^2+w_1 \sigma_1^2}
+$$
 
 下面, 我们简述算法实现的流程:
 
@@ -109,14 +113,13 @@ $$ T^{*}_{ostu} = argmax_{T} \  \frac{ w_0 w_1( \mu_0 - \mu_1 )^2}{ w_0 \sigma_{
 
 将使用 $\text{HSV}$ 表示色彩的图像的色相反转吧!
 
- $\text{HSV}$ 即使用**色相(Hue)、饱和度(Saturation)、明度(Value)**来表示色彩的一种方式.
-
-* 色相: 将颜色使用 $0^{\circ}$ 到 $360^{\circ}$ 表示, 就是平常所说的颜色名称, 如红色、蓝色. 色相与数值按下表对应:
+ $\text{HSV}$ 即使用 **色相(Hue)**, **饱和度(Saturation)**, **明度(Value)** 来表示色彩的一种方式.
 
 | 红          | 黄           | 绿            | 青色          | 蓝色          | 品红          | 红            |
 | ----------- | ------------ | ------------- | ------------- | ------------- | ------------- | ------------- |
 | $0^{\circ}$ | $60^{\circ}$ | $120^{\circ}$ | $180^{\circ}$ | $240^{\circ}$ | $300^{\circ}$ | $360^{\circ}$ |
 
+* 色相: 将颜色使用 $0^{\circ}$ 到 $360^{\circ}$ 表示, 就是平常所说的颜色名称, 如红色、蓝色. 色相与数值按下表对应:
 * 饱和度: 是指色彩的纯度, 饱和度越低则颜色越黯淡( $0\leq S < 1$ )；
 * 明度: 即颜色的明暗程度. 数值越高越接近白色, 数值越低越接近黑色( $0\leq V < 1$ )；
 
@@ -154,7 +157,6 @@ $$
   X = C\  (1 - |H' \mod 2 - 1|) \\
   (R, G, B) = (V-C) \cdot (1, 1, 1) +
   \begin{cases}
-
     (0, 0, 0) &  (\text{if H is undefined}) \\
     (C, X, 0) &  (\text{if}\quad 0 \leq H' < 1) \\
     (X, C, 0) &  (\text{if}\quad 1 \leq H' < 2) \\
@@ -162,7 +164,6 @@ $$
     (0, X, C) &  (\text{if}\quad 3 \leq H' < 4) \\
     (X, 0, C) &  (\text{if}\quad 4 \leq H' < 5) \\
     (C, 0, X) &  (\text{if}\quad 5 \leq H' < 6)
-
   \end{cases}
 \end{gather*}
 $$ 
