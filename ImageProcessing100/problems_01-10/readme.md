@@ -1,3 +1,6 @@
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css" integrity="sha384-AbJlzz/xZ7z1fRlY+X9s+1TtAnvHxW+LBojQgsO9AXFjRLvngdWpy+8YcRWjV7+l" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js" integrity="sha384-5j5N5xgkL8PdH56QKhsM1XnNGufv/B8WixBejgvfQNuw+pzxnqh6v5LPr7ce4y4G" crossorigin="anonymous"></script>
+
 # 问题 01-10
 
 ## 问题 01 通道交换 Channel Swap
@@ -86,7 +89,7 @@ $$
 
 $$ 
 \begin{equation}
-  T^*_{fisher} = argmax_{T} \ \frac{(\mu_0 - \mu_1)^2}{\sigma_0^2 + \sigma_1^2}
+  T^*_{fisher} = argmax_{T} \  \frac{(\mu_0 - \mu_1)^2}{\sigma_0^2 + \sigma_1^2}
 \end{equation}
 $$ 
 
@@ -94,7 +97,7 @@ $$
 
 $$ 
 \begin{equation}
-  T^*_{ostu} = argmax_{T} \ \frac{w_0w_1(\mu_0 - \mu_1)^2}{w_0\sigma_0^2 + w_1\sigma_1^2} 
+  T^*_{ostu} = argmax_{T} \  \frac{w_0w_1(\mu_0 - \mu_1)^2}{w_0\sigma_0^2 + w_1\sigma_1^2} 
 \end{equation}
 $$ 
 
