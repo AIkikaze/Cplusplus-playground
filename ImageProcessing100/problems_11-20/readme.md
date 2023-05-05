@@ -185,7 +185,7 @@ K=
 \left[
 \begin{matrix}
 -2&-1&0\\
--1&1&1\\
+-1&1&1 \\
 0&1&2
 \end{matrix}
 \right]
@@ -205,7 +205,7 @@ $$
 \text{LoG}(x,y)=\frac{x^2 + y^2 - s^2}{2 \  \pi \  s^6} \  e^{-\frac{x^2+y^2}{2\  s^2}}
 $$
 
-## 问题二十：直方图
+## 问题 20 绘制直方图
 
 使用`Matplotlib`来绘制`imori_dark.jpg`的直方图吧！
 
