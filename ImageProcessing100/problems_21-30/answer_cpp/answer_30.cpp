@@ -15,7 +15,7 @@ using namespace cv;
 inline 
 uchar getPixelValue(const Mat &I, int _i, int _j, int _c, const Mat &O) {
   Mat xy1 = (Mat_<double>(3, 1) << (double)_j, (double)_i, 1.0);
-  Mat _xy1 = O.inv() * xy1;
+  Mat _xy1 = O * xy1;
   int _x = _xy1.at<double>(0, 0);
   int _y = _xy1.at<double>(1, 0);
 
@@ -32,11 +32,12 @@ Mat afineTrans(const Mat &I, const Mat &O) {
   int n_cols = I.cols;
   int n_channel = I.channels();
   Mat T = Mat::zeros(n_rows, n_cols, CV_8UC3);
+  Mat trans_mat = O.inv();
 
   for(int i = 0; i < n_rows; i++)
     for(int j = 0; j < n_cols; j++)
       for(int c = 0; c < n_channel; c++)
-        T.at<Vec3b>(i, j)[c] = getPixelValue(I, i, j, c, O);
+        T.at<Vec3b>(i, j)[c] = getPixelValue(I, i, j, c, trans_mat);
 
   return T;
 }
@@ -44,9 +45,14 @@ Mat afineTrans(const Mat &I, const Mat &O) {
 int main() {
   Mat img = imread("../imagelib/imori.jpg", IMREAD_COLOR);
   imshow("before", img);
-  Mat O = (Mat_<double>(3,3) << 1, 0, 30, 0, 1, -30, 0, 0, 1);
+  double alpha = -CV_PI / 6.0;
+  double c_x = cvFloor((double)img.cols/2.0) + 1;
+  double c_y = cvFloor((double)img.rows/2.0) + 1;
+  double t_x = -(c_x * cos(alpha) - c_y * sin(alpha)) + c_x;
+  double t_y = -(c_x * sin(alpha) + c_y * cos(alpha)) + c_y;
+  Mat O = (Mat_<double>(3,3) << cos(alpha), -sin(alpha), t_x, sin(alpha), cos(alpha), t_y, 0, 0, 1);
   Mat A = afineTrans(img, O);
-  imshow("afineTrans", A);
+  imshow("rotate and AfineTrans", A);
   waitKey();
   return 0;
 }
