@@ -7,8 +7,10 @@ modified date: 20230506
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
+#include <vector>
 using namespace std;
 using namespace cv;
+typedef vector<vector<complex<double>>> cMat;
 
 Mat histNormalize(Mat &I) {
   int n_rows = I.rows;
@@ -49,10 +51,10 @@ Mat grayScale(Mat &I) {
 }
 
 inline
-double getFourierValue(const Mat &I, int k, int l) {
+complex<double> getFourierValue(const Mat &I, int k, int l) {
   double Iij;
   double theta;
-  complex<double> val;
+  complex<double> val(0.0, 0.0);
  
   for(int i = 0; i < I.rows; i++) {
     for(int j = 0; j < I.cols; j++) {
@@ -63,57 +65,65 @@ double getFourierValue(const Mat &I, int k, int l) {
   }
   val /= sqrt(I.rows * I.cols);
 
-  return abs(val);
+  return val;
 }
 
 inline
-double getInvFourierValue(const Mat &I, int k, int l) {
-  double Iij;
+double getInvFourierValue(const cMat &G, int y, int x) {
+  int n_rows = G.size();
+  int n_cols = n_rows > 0 ? G[0].size() : 0;
   double theta;
-  complex<double> val;
+  complex<double> val(0.0, 0.0);
  
-  for(int i = 0; i < I.rows; i++) {
-    for(int j = 0; j < I.cols; j++) {
-      Iij = (double)I.at<uchar>(i, j);
-      theta = -2.0 * CV_PI * ((double)k*i/I.rows + (double)l*j/I.cols);
-      val += complex<double>(cos(theta), sin(theta)) * Iij;
+  for(int i = 0; i < n_rows; i++) {
+    for(int j = 0; j < n_cols; j++) {
+      theta = 2.0 * CV_PI * ((double)y*i/n_rows + (double)x*j/n_cols);
+      val += complex<double>(cos(theta), sin(theta)) * G[i][j];
     }
   }
-  val /= sqrt(I.rows * I.cols);
+  val /= sqrt(n_rows * n_cols);
 
   return abs(val);
 }
 
-Mat fourierTrans(const Mat &I) {
+Mat fourierTrans(const Mat &I, cMat &C) {
   int n_row = I.rows;
   int n_col = I.cols;
   Mat G = Mat::zeros(n_row, n_col, CV_64F);
   
-  for(int i = 0; i < n_row; i++)
-    for(int j = 0; j < n_col; j++)
-      G.at<double>(i, j) = getFourierValue(I, i, j);
+  for(int i = 0; i < n_row; i++) {
+    for(int j = 0; j < n_col; j++) {
+      C[i][j] = getFourierValue(I, i, j);
+      G.at<double>(i, j) = abs(C[i][j]);
+    }
+  }
 
   return G;
 }
 
-Mat invFourierTrans(const Mat &I) {
-  int n_row = I.rows;
-  int n_col = I.cols;
-  Mat G = Mat::zeros(n_row, n_col, CV_8U);
-  
-  for(int i = 0; i < n_row; i++)
-    for(int j = 0; j < n_col; j++)
-      G.at<uchar>(i, j) = (uchar)getFourierValue(I, i, j);
+Mat invFourierTrans(cMat &C) {
+  int n_row = C.size();
+  int n_col = n_row > 0? C[0].size() : 0;
+  Mat I = Mat::zeros(n_row, n_col, CV_8U);
 
-  return G;
+  for(int k = 0; k < n_row; k++) {
+    for(int l = 0; l < n_col; l++) {
+      I.at<uchar>(k, l) = uchar(getInvFourierValue(C, k, l));
+    }
+  }
+
+  return I;
 }
 
 int main() {
-  Mat img = imread("../imagelib/test.png", IMREAD_COLOR);
+  Mat img = imread("../imagelib/imori.jpg", IMREAD_COLOR);
+  int n_row = img.rows;
+  int n_col = img.cols;
+  cMat fourier_coffix(n_row, vector<complex<double>>(n_col, 0));
 
   Mat A = grayScale(img);
-  Mat F = fourierTrans(A);
-  Mat iF = invFourierTrans(F);
+  Mat F = fourierTrans(A, fourier_coffix);
+  Mat iF = invFourierTrans(fourier_coffix);
   Mat B = histNormalize(F);
 
   imshow("grayScale", A);
