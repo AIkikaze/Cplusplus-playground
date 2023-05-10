@@ -1,7 +1,12 @@
 /*
-author: wenzy
-modified date: 20230506
-*/
+ * @Author: AIkikaze wenwenziy@163.com
+ * @Date: 2023-05-06 13:44:27
+ * @LastEditors: AIkikaze wenwenziy@163.com
+ * @LastEditTime: 2023-05-09 15:48:21
+ * @FilePath: \Cplusplus-playground\ImageProcessing100\problems_31-40\answer_cpp\answer_32.cpp
+ * @Description: 
+ * 
+ */
 #include <opencv2/core.hpp>
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -12,40 +17,19 @@ using namespace std;
 using namespace cv;
 typedef vector<vector<complex<double>>> cMat;
 
-Mat histNormalize(Mat &I) {
-  int n_rows = I.rows;
-  int n_cols = I.cols;
-  Mat T = Mat::zeros(n_rows, n_cols, CV_8U);
-  double h_min = I.at<double>(0, 0);
-  double h_max = 0.0;
-  for(int i = 0; i < n_rows; i++)
-    for(int j = 0; j < n_cols; j++) {
-      h_min = min(I.at<double>(i, j), h_min);
-      h_max = max(I.at<double>(i, j), h_max);
-    }
-
-  for(int i = 0; i < n_rows; i++)
-    for(int j = 0; j < n_cols; j++) {
-        double _pij = I.at<double>(i, j);
-        _pij = 255.0 * (_pij - h_min) / (h_max - h_min);
-        T.at<uchar>(i, j) = (uchar)_pij;
-      }
-
-  return T;
-}
-
 Mat grayScale(Mat &I) {
   int n_row = I.rows;
   int n_col = I.cols;
   Mat T = Mat::zeros(n_row, n_col, CV_8U);
 
-  for(int i = 0; i < n_row; i++)
+  for(int i = 0; i < n_row; i++) {
     for(int j = 0; j < n_col; j++) {
       double b = I.at<Vec3b>(i, j)[0];
       double g = I.at<Vec3b>(i, j)[1];
       double r = I.at<Vec3b>(i, j)[2];
       T.at<uchar>(i, j) = (uchar)( 0.2126 * b + 0.7152 * g + 0.0722 * r );
     }
+  }
 
   return T;
 }
@@ -115,18 +99,64 @@ Mat invFourierTrans(cMat &C) {
   return I;
 }
 
+void preinit(Mat &I, cMat &C) {
+  // 将 img 转为灰度图
+  I = grayScale(I);
+  // 扩充图像以获得最佳计算尺寸
+  int n_row = getOptimalDFTSize(I.rows);
+  int n_col = getOptimalDFTSize(I.cols);
+  copyMakeBorder(I, I, 0, n_row - I.rows, 0, n_col - I.cols, BORDER_CONSTANT, Scalar::all(0));
+  // 初始化复数矩阵
+  C = cMat(n_row, vector<complex<double>>(n_col, 0));
+}
+
+Mat mydft(const Mat &I) {
+  // 将 planes 融合为多通道矩阵 Mat 同时用于储存傅里叶计算得到的复数矩阵
+  Mat planes[] = { Mat_<double>(I), Mat::zeros(I.size(), CV_64F) };
+  Mat mergeArray;
+  merge(planes, 2, mergeArray);
+  // 傅里叶变换
+  dft(mergeArray, mergeArray);
+  return mergeArray;
+}
+
+Mat fourierPlot(const Mat &I) {
+  Mat T = I.clone();
+  T += Scalar::all(1);
+  log(T, T);
+  // 将幅度谱剪裁为偶数行与偶数列(方便后面的重新排列）
+	T = T(Range(0, T.rows & -2), Range(0, T.cols & -2));
+	// 重新排列幅度谱的区域，使得幅度谱的原点位于图像中心
+	int x0 = T.cols / 2;
+	int y0 = T.rows / 2;
+	Mat q0(T, Rect(0, 0, x0, y0));       //左上角图像
+	Mat q1(T, Rect(x0, 0, x0, y0));      //右上角图像
+	Mat q2(T, Rect(0, y0, x0, y0));      //左下角图像
+	Mat q3(T, Rect(x0, y0, x0, y0));     //右下角图像
+  // 交换第一象限和第三象限
+  Mat tmp;
+  q0.copyTo(tmp);
+  q3.copyTo(q0);
+  tmp.copyTo(q3);
+  // 交换第二象限和第四象限
+  q1.copyTo(tmp);
+  q2.copyTo(q1);
+  tmp.copyTo(q2);
+  // 归一化
+  normalize(T, T, 0, 1, NORM_MINMAX);
+  return T;
+}
+
 int main() {
   Mat img = imread("../imagelib/imori.jpg", IMREAD_COLOR);
-  int n_row = img.rows;
-  int n_col = img.cols;
-  cMat fourier_coffix(n_row, vector<complex<double>>(n_col, 0));
+  cMat fourier_coffix;
 
-  Mat A = grayScale(img);
-  Mat F = fourierTrans(A, fourier_coffix);
+  preinit(img, fourier_coffix);
+  Mat F = fourierTrans(img, fourier_coffix);
   Mat iF = invFourierTrans(fourier_coffix);
-  Mat B = histNormalize(F);
+  Mat B = fourierPlot(F);
 
-  imshow("grayScale", A);
+  imshow("grayScale", img);
   imshow("fourierTrans", B);
   imshow("invFourierTrans", iF);
   waitKey();

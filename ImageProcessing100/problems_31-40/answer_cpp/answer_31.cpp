@@ -1,4 +1,13 @@
 /*
+ * @Author: AIkikaze wenwenziy@163.com
+ * @Date: 2023-05-06 10:13:15
+ * @LastEditors: AIkikaze wenwenziy@163.com
+ * @LastEditTime: 2023-05-09 16:30:40
+ * @FilePath: \Cplusplus-playground\ImageProcessing100\problems_31-40\answer_cpp\answer_31.cpp
+ * @Description: 
+ * 
+ */
+/*
 author: wenzy
 modified date: 20230505
 */
@@ -45,18 +54,17 @@ Mat afineTrans(const Mat &I, const Mat &O) {
 int main() {
   Mat img = imread("../imagelib/imori.jpg", IMREAD_COLOR);
   imshow("before", img);
-  // double c_x = cvFloor((double)img.cols / 2.0) + 1;
-  // double c_y = cvFloor((double)img.rows / 2.0) + 1;
-  // double t_x = c_x - (c_x + 30.0 / img.rows * c_y);
-  // double t_y = c_y - c_y;
-  // Mat O = (Mat_<double>(3,3) << 1, 30.0 / img.rows, t_x, 0, 1, t_y, 0, 0, 1);
   double c_x = cvFloor((double)img.cols / 2.0) + 1;
   double c_y = cvFloor((double)img.rows / 2.0) + 1;
-  double t_x = c_x - c_x;
-  double t_y = c_y - (30.0 / img.cols * c_x + c_y);
-  Mat O = (Mat_<double>(3,3) << 1, 0, t_x, 30.0 / img.cols, 1, t_y, 0, 0, 1);
+  double t_x = c_x - (c_x + 30.0 / img.rows * c_y);
+  double t_y = c_y - c_y;
+  Mat O = (Mat_<double>(3,3) << 1, 30.0 / img.rows, t_x, 0, 1, t_y, 0, 0, 1);
+  // double c_x = cvFloor((double)img.cols / 2.0) + 1;
+  // double c_y = cvFloor((double)img.rows / 2.0) + 1;
+  // double t_x = c_x - c_x;
+  // double t_y = c_y - (30.0 / img.cols * c_x + c_y);
+  // Mat O = (Mat_<double>(3,3) << 1, 0, t_x, 30.0 / img.cols, 1, t_y, 0, 0, 1);
   Mat A = afineTrans(img, O);
   imshow("rotate and AfineTrans", A);
-  waitKey();
-  return 0;
+  waitKey();  return 0;
 }

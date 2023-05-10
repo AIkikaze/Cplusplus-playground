@@ -1,8 +1,12 @@
 /*
-author: wenzy
-modified date: 20230429
-target: design an algorithm to transform a colored image to a Grayscaled image
-*/
+ * @Author: AIkikaze wenwenziy@163.com
+ * @Date: 2023-05-04 08:11:35
+ * @LastEditors: AIkikaze wenwenziy@163.com
+ * @LastEditTime: 2023-05-08 17:24:10
+ * @FilePath: \Cplusplus-playground\ImageProcessing100\problems_01-10\answer_cpp\answer_02.cpp
+ * @Description: 
+ * 
+ */
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>

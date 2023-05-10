@@ -1,17 +1,19 @@
 /*
-author: wenzy
-modified date: 20230429
-target: design an algorithm to change the color channdels of an image from BGR to RGB 
-*/
+ * @Author: AIkikaze wenwenziy@163.com
+ * @Date: 2023-05-04 08:11:35
+ * @LastEditors: AIkikaze wenwenziy@163.com
+ * @LastEditTime: 2023-05-08 17:14:33
+ * @FilePath: \Cplusplus-playground\ImageProcessing100\problems_01-10\answer_cpp\answer_01.cpp
+ * @Description: 
+ * 读取图像, 将 RGB 通道的图片转换为 BRG 通道
+ */
+
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <algorithm>
 using namespace cv;
 using namespace std;
 
-// function: I 中对每个像素交换色彩通道 BRR2RGB
-// input: 格式为 CV_8U3C 的 Mat 像素矩阵 I
-// ouput: 像素矩阵 T
 Mat channelSwap(Mat &I) {
     Mat T = I.clone();
     int nRows = I.rows;

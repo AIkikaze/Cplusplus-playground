@@ -2,59 +2,51 @@
 
 ## 问题 31 仿射变换—倾斜 Afine Transformations
 
-1. 使用仿射变换，输出（1）那样的 $x$ 轴倾斜 $30$ 度的图像（ $t_x=30$ ），这种变换被称为 X-sharing。
-2. 使用仿射变换，输出（2）那样的y轴倾斜 $30$ 度的图像（ $t_y=30$ ），这种变换被称为 Y-sharing。
-3. 使用仿射变换，输出（3）那样的 $x$ 轴、 $y$ 轴都倾斜 $30$ 度的图像( $t_x = 30$ ， $t_y = 30$ )。
+记图像的大小为 $height (h) \times width(w)$：
 
-原图像的大小为 $h \times w$ ，使用下面各式进行仿射变换：
+1. 使用仿射变换，输出向 $x$ 轴倾斜 $30$ 度的图像（ $t_x=30$ ），这种变换被称为 X-shearing。
+2. 使用仿射变换，输出向 $y$ 轴倾斜 $30$ 度的图像（ $t_y=30$ ），这种变换被称为 Y-shearing。
+3. 使用仿射变换，输出向 $x$ 轴、 $y$ 轴都倾斜 $30$ 度的图像 ($t_x = 30$ ， $t_y = 30$)。
 
-* X-sharing
+* X-shearing
   $$
-  a=\frac{t_x}{h}\\
   \left[
-  \begin{matrix}
-  x'\\
-  y'\\
-  1
-  \end{matrix}
-  \right]=\left[
-  \begin{matrix}
-  1&a&t_x\\
-  0&1&t_y\\
-  0&0&1
-  \end{matrix}
-  \right]\ 
+    \begin{matrix}
+        x'\\  y'\\  1
+    \end{matrix}
+  \right] = 
   \left[
-  \begin{matrix}
-  x\\
-  y\\
-  1
-  \end{matrix}
+    \begin{matrix}
+      1 & t_x/h & t_x \\
+      0 & 1 & t_y \\
+      0 & 0 & 1
+    \end{matrix}
+  \right] \cdot
+  \left[
+    \begin{matrix}
+      x\\  y\\  1
+    \end{matrix}
   \right]
   $$
 
-* Y-sharing
+* Y-shearing
   $$
-  a=\frac{t_y}{w}\\
   \left[
-  \begin{matrix}
-  x'\\
-  y'\\
-  1
-  \end{matrix}
-  \right]=\left[
-  \begin{matrix}
-  1&0&t_x\\
-  a&1&t_y\\
-  0&0&1
-  \end{matrix}
-  \right]\ 
+    \begin{matrix}
+      x'\\  y'\\  1
+    \end{matrix}
+  \right] = 
   \left[
-  \begin{matrix}
-  x\\
-  y\\
-  1
-  \end{matrix}
+    \begin{matrix}
+      1 & 0 & t_x \\
+      t_y/w & 1 & t_y \\
+      0 & 0 & 1
+    \end{matrix}
+  \right] \cdot
+  \left[
+    \begin{matrix}
+      x\\  y\\  1
+    \end{matrix}
   \right]
   $$
 
@@ -65,40 +57,28 @@
 二维离散傅立叶变换是傅立叶变换在图像处理上的应用方法。通常傅立叶变换用于分离模拟信号或音频等连续一维信号的频率。但是，数字图像使用 $[0,255]$ 范围内的离散值表示，并且图像使用 $H\times W$ 的二维矩阵表示，所以在这里使用二维离散傅立叶变换。
 
 二维离散傅立叶变换使用下式计算，其中 $I$ 表示输入图像：
+
 $$
 G(k,l)=\frac{1}{H\  W}\ \sum\limits_{y=0}^{H-1}\ \sum\limits_{x=0}^{W-1}\ I(x,y)\ e^{-2\  \pi\  j\ (\frac{k\  x}{W}+\frac{l\  y}{H})}
 $$
+
 在这里让图像灰度化后，再进行离散二维傅立叶变换。
 
 频谱图为了能表示复数 $G$ ，所以图上所画长度为 $G$ 的绝对值。这回的图像表示时，请将频谱图缩放至 $[0,255]$ 范围。
 
 二维离散傅立叶逆变换从频率分量 $G$ 按照下式复原图像：
+
 $$
 I(x,y)=\frac{1}{H\  W}\ \sum\limits_{l=0}^{H-1}\ \sum\limits_{k=0}^{W-1}\ G(l,k)\ e^{2\  \pi\  j\ (\frac{k\  x}{W}+\frac{l\  y}{H})}
 $$
 
 上式中 $\exp(j)$ 是个复数，实际编程的时候请务必使用下式中的绝对值形态[^1]：
 
-[^1]: 这里应该有个公式的，但是它不知道去哪儿了。
-
-如果只是简单地使用`for`语句的话，计算量达到 $128^4$ ，十分耗时。如果善用`NumPy`的化，则可以减少计算量（答案中已经减少到 $128^2$ ）。
-
-| 输入 (imori.jpg) | 灰度化 (imori_gray.jpg) | 输出 (answers_image/answer_32.jpg) | 频谱图 (answers_image/answer_32_ps.py) |
-| :--------------: | :---------------------: | :--------------------------------: | :------------------------------------: |
-|  ![](imori.jpg)  |   ![](imori_gray.jpg)   |  ![](answers_image/answer_32.jpg)  |  ![](answers_image/answer_32_ps.jpg)   |
-
-> 答案 
->
-> - Python >> [answers_py/answer_32.py](answers_py/answer_32.py)
-> - C++ >> [answers_cpp/answer_32.cpp](answers_cpp/answer_32.cpp)
-
-## 问题三十三：傅立叶变换——低通滤波
+## 问题 33 傅立叶变换——低通滤波
 
 将`imori.jpg`灰度化之后进行傅立叶变换并进行低通滤波，之后再用傅立叶逆变换复原吧！
 
 通过离散傅立叶变换得到的频率在左上、右上、左下、右下等地方频率较低，在中心位置频率较高。[^2]
-
-![lpf](assets/lpf.png)
 
 [^2]: 下面图里文字的意思：高周波=高频；低周波=低频；入れ替え=替换。
 
@@ -106,46 +86,19 @@ $$
 
 在这里，假设从低频的中心到高频的距离为 $r$ ，我们保留 $0.5\ r$ ​的低频分量。
 
-| 输入 (imori.jpg) | 输出(answers_image/answer_33.jpg) |
-| :--------------: | :-------------------------------: |
-|  ![](imori.jpg)  | ![](answers_image/answer_33.jpg)  |
-
-> 答案
->
-> - Python >> [answers_py/answer_33.py](answers_py/answer_33.py)
-> - C++ >> [answers_cpp/answer_33.cpp](answers_cpp/answer_33.cpp)
-
-## 问题三十四：傅立叶变换——高通滤波
+## 问题 34 傅立叶变换——高通滤波
 
 将`imori.jpg`灰度化之后进行傅立叶变换并进行高通滤波，之后再用傅立叶逆变换复原吧！
 
 在这里，我们使用可以去除低频部分，只保留高频部分的**高通滤波器**。假设从低频的中心到高频的距离为 $r$ ，我们保留 $0.2\ r$ ​的低频分量。
 
-| 输入 (imori.jpg) | 输出(answers_image/answer_34.jpg) |
-| :--------------: | :-------------------------------: |
-|  ![](imori.jpg)  | ![](answers_image/answer_34.jpg)  |
-
-> 答案
->
-> - Python >> [answers_py/answer_34.py](answers_py/answer_34.py)
-> - C++ >> [answers_cpp/answer_34.cpp](answers_cpp/answer_34.cpp)
-
-## 问题三十五：傅立叶变换——带通滤波
+## 问题 35 傅立叶变换——带通滤波
 
 将`imori.jpg`灰度化之后进行傅立叶变换并进行带通滤波，之后再用傅立叶逆变换复原吧！
 
 在这里，我们使用可以保留介于低频成分和高频成分之间的分量的**带通滤波器**。在这里，我们使用可以去除低频部分，只保留高频部分的高通滤波器。假设从低频的中心到高频的距离为 $r$ ，我们保留 $0.1\  r$ 至 $0.5\  r$ 的分量。  
 
-| 输入 (imori.jpg) | 输出(answers_image/answer_34.jpg) |
-| :--------------: | :-------------------------------: |
-|  ![](imori.jpg)  | ![](answers_image/answer_34.jpg)  |
-
-> 答案
->
-> - Python >> [answers_py/answer_35.py](answers_py/answer_35.py)
-> - C++ >> [answers_cpp/answer_35.cpp](answers_cpp/answer_35.cpp)
-
-## 问题三十六：JPEG 压缩——第一步：离散余弦变换（Discrete Cosine Transformation）
+## 问题 36 JPEG 压缩——第一步：离散余弦变换（Discrete Cosine Transformation）
 
 `imori.jpg`灰度化之后，先进行离散余弦变换，再进行离散余弦逆变换吧！
 
@@ -179,38 +132,26 @@ $$
 >
 > ——gzr
 
-| 输入 (imori.jpg) | 输出(answers_image/answer_36.jpg) |
-| :--------------: | :-------------------------------: |
-|  ![](imori.jpg)  | ![](answers_image/answer_36.jpg)  |
-
-答案 >> [answers/answer_36.py](https://github.com/yoyoyo-yo/Gasyori100knock/blob/master/Question_31_40/answers/answer_36.py)
-
-## 问题三十七：PSNR
+## 问题 37 PSNR
 
 离散余弦逆变换中如果不使用 $8$ 作为系数，而是使用 $4$ 作为系数的话，图像的画质会变差。来求输入图像和经过离散余弦逆变换之后的图像的峰值信噪比吧！再求出离散余弦逆变换的比特率吧！
 
 峰值信噪比（Peak Signal to Noise Ratio）缩写为PSNR，用来表示信号最大可能功率和影响它的表示精度的破坏性噪声功率的比值，可以显示图像画质损失的程度。
 
 峰值信噪比越大，表示画质损失越小。峰值信噪比通过下式定义。MAX表示图像点颜色的最大数值。如果取值范围是 $[0,255]$ 的话，那么MAX的值就为255。MSE表示均方误差（Mean Squared Error），用来表示两个图像各个像素点之间差值平方和的平均数：
+
 $$
 \text{PSNR}=10\  \log_{10}\ \frac{{v_{max}}^2}{\text{MSE}}\\
 \text{MSE}=\frac{\sum\limits_{y=0}^{H-1}\ \sum\limits_{x=0}^{W-1}\ [I_1(x,y)-I_2(x,y)]^2}{H\  W}
 $$
-如果我们进行 $8\times8$ 的离散余弦变换，离散余弦逆变换的系数为 $KtimesK$ 的话，比特率按下式定义：
+
+如果我们进行 $8 \times 8$ 的离散余弦变换，离散余弦逆变换的系数为 $K \times K$ 的话，比特率按下式定义：
+
 $$
-\text{bit rate}=8\ \frac{K^2}{8^2}
+\text{bit rate}=8 \ \frac{K^2}{8^2}
 $$
 
-| 输入 (imori.jpg) | 输出 (answers_image/answer_37.jpg) ( $\text{PSNR}= 27.62$ , Bitrate=2.0) |
-| :--------------: | :--------------------------------------------------------------------: |
-|  ![](imori.jpg)  |                    ![](answers_image/answer_37.jpg)                    |
-
-> 答案 
->
-> - Python >> [answers_py/answer_37.py](answers_py/answer_37.py)
-> - C++ >> [answers_cpp/answer_37.cpp](answers_cpp/answer_37.cpp)
-
-## 问题三十八：：JPEG 压缩——第二步：离散余弦变换+量化
+## 问题 38 JPEG 压缩——第二步：离散余弦变换+量化
 
 量化离散余弦变换系数并使用 离散余弦逆变换恢复。再比较变换前后图片的大小。
 
@@ -233,16 +174,7 @@ Q = np.array(((16, 11, 10, 16, 24, 40, 51, 61),
 
 由于量化降低了图像的大小，因此可以看出数据量已经减少。
 
-| 输入 (imori.jpg) | 出力 (answers_image/answer_38.jpg) (7kb) |
-| :--------------: | :--------------------------------------: |
-|  ![](imori.jpg)  |     ![](answers_image/answer_38.jpg)     |
-
-> 答案 
->
-> - Python >> [answers_py/answer_38.py](answers_py/answer_38.py)
-> - C++ >> [answers_cpp/answer_38.cpp](answers_cpp/answer_38.cpp)
-
-## 问题三十九：JPEG 压缩——第三步：YCbCr 色彩空间
+## 问题 39 JPEG 压缩——第三步：YCbCr 色彩空间
 
 在 YCbCr 色彩空间内，将 Y 乘以0.7以使对比度变暗。
 
@@ -263,16 +195,7 @@ G = Y - (Cb - 128) \  0.3441 - (Cr - 128) \  0.7139\\
 B = Y + (Cb - 128) \  1.7718
 $$
 
-| 入力 (imori.jpg) | 出力 (answers_image/answer_39.jpg) |
-| :--------------: | :--------------------------------: |
-|  ![](imori.jpg)  |  ![](answers_image/answer_39.jpg)  |
-
-> 答案 
->
-> - Python >> [answers_py/answer_39.py](answers_py/answer_39.py)
-> - C++ >> [answers_cpp/answer_39.cpp](answers_cpp/answer_39.cpp)
-
-## 问题四十：JPEG 压缩——第四步：YCbCr+离散余弦变换+量化
+## 问题 40 JPEG 压缩——第四步：YCbCr+离散余弦变换+量化
 
 将图像转为 YCbCr 色彩空间之后，进行 离散余弦变换再对 Y 用 Q1 量化矩阵量化，Cb 和 Cr 用 Q2 量化矩阵量化。最后通过离散余弦逆变换对图像复原。还需比较图像的容量。算法如下：
 
@@ -303,12 +226,3 @@ Q2 = np.array(((17, 18, 24, 47, 99, 99, 99, 99),
                (99, 99, 99, 99, 99, 99, 99, 99),
                (99, 99, 99, 99, 99, 99, 99, 99)), dtype=np.float32)
 ```
-
-| 输入 (imori.jpg) (13kb) | 输出 (answers/answer_40.jpg) (8kb) |
-| :---------------------: | :--------------------------------: |
-|     ![](imori.jpg)      |  ![](answers_image/answer_40.jpg)  |
-
-> 答案 
->
-> - Python >> [answers_py/answer_40.py](answers_py/answer_40.py)
-> - C++ >> [answers_cpp/answer_40.cpp](answers_cpp/answer_40.cpp)
