@@ -2,7 +2,7 @@
  * @Author: AIkikaze wenwenziy@163.com
  * @Date: 2023-05-10 14:10:36
  * @LastEditors: AIkikaze wenwenziy@163.com
- * @LastEditTime: 2023-05-10 17:12:06
+ * @LastEditTime: 2023-05-11 14:29:27
  * @FilePath: \Cplusplus-playground\ImageProcessing100\problems_41-50\answer_cpp\answer_44.cpp
  * @Description: 
  * 
@@ -13,6 +13,7 @@
 #include <opencv2/highgui.hpp>
 #include <iostream>
 #include <set>
+#define _max(a, b, c) fmax(a, fmax(b, c))
 using namespace std;
 using namespace cv;
 
@@ -47,9 +48,9 @@ Mat gaussianFilter(const Mat &I, Size k_size, double Sigma) {
       val = 0.0;
       for(int y = 0; y < k_size.height; y++) {
         for(int x = 0; x < k_size.width; x++) {
-          if(i+dy[y] < 0 || i+dy[y] >= I.rows || j+dx[x] < 0 || j+dx[x] >= I.cols)
-            continue;
-          val += I.at<double>(i+dy[y], j+dx[x]) * kernel[y][x];
+          int u = borderInterpolate(i+dy[y], I.rows, BORDER_REPLICATE);
+          int v = borderInterpolate(j+dx[x], I.cols, BORDER_REPLICATE);
+          val += I.at<double>(u, v) * kernel[y][x];
         }
       }
       T.at<double>(i, j) = val;
@@ -79,12 +80,12 @@ Mat sobelFilter(const Mat &I) {
       valy = valx = 0.0;
       for(int y = 0; y < 3; y++) {
         for(int x = 0; x < 3; x++) {
-          if(i+dyx[y] < 0 || i+dyx[y] >= I.rows || j+dyx[x] < 0 || j+dyx[x] >= I.cols)
-            continue;
-          // 垂直 y 方向
-          valy += I.at<double>(i+dyx[y], j+dyx[x]) * vecx[x] * vecy[y];
-          // 水平 x 方向
-          valx += I.at<double>(i+dyx[y], j+dyx[x]) * vecx[y] * vecy[x];
+          int u = borderInterpolate(i+dyx[y], I.rows, BORDER_REPLICATE);
+          int v = borderInterpolate(j+dyx[x], I.cols, BORDER_REPLICATE);
+          // 计算垂直方向 fy 
+          valy += I.at<double>(u, v) * vecy[y] * vecx[x];
+          // 计算水平方向 fx
+          valx += I.at<double>(u, v) * vecx[y] * vecy[x];
         }
       }
       T.at<Vec2d>(i, j)[0] = valy;
@@ -94,8 +95,19 @@ Mat sobelFilter(const Mat &I) {
   return T;
 }
 
+/*
+-22.5: -0.414214
+22.5: 0.414214
+67.5: 2.41421
+112.5: -2.41421
+157.5: -0.414214
+->0^o \in [-0.414214, 0.414214]
+  45^o \in [0.414214, 2.41421]
+  90^o \in ,-2.41421]U[2.41421,
+  135^o \in [-2.41421, -0.414214]
+*/
 // 对经过 sobel 滤波的差分矩阵进行量化绘图
-Mat getEdge(const Mat &I) {
+Mat getEdge(const Mat &I, int LT = 60, int HT = 100) {
   // 初始化 梯度矩阵 和 方向角矩阵
   Mat edge = Mat::zeros(I.rows, I.cols, CV_64F);
   Mat angle = Mat::zeros(I.rows, I.cols, CV_8U);
@@ -103,67 +115,88 @@ Mat getEdge(const Mat &I) {
   for(int i = 0; i < I.rows; i++) {
     for(int j = 0; j < I.cols; j++) {
       edge.at<double>(i, j) = sqrt(pow(I.at<Vec2d>(i, j)[0], 2) + pow(I.at<Vec2d>(i, j)[1], 2));
-      double a_tan = atan(I.at<Vec2d>(i, j)[0] / I.at<Vec2d>(i, j)[1]);
-      if(a_tan > -0.4142 && a_tan <= 0.4142)
+      if(edge.at<double>(i, j) < 1.0) {
         angle.at<uchar>(i, j) = 0;
-      else if(a_tan > 0.4142 && a_tan < 2.4142)
-        angle.at<uchar>(i, j) = 45;
-      else if(abs(a_tan) >= 2.4142)
+        continue;
+      }
+      if(!I.at<Vec2d>(i, j)[1]) {
         angle.at<uchar>(i, j) = 90;
-      else if(a_tan > -2.4142 && a_tan <= -0.4142)
+        continue;
+      }
+      double a_tan = atan(I.at<Vec2d>(i, j)[0]/I.at<Vec2d>(i, j)[1]);
+      if(abs(a_tan) <= 0.414214)
+        angle.at<uchar>(i, j) = 0;
+      else if(a_tan > 0.414214 && a_tan < 2.41421)
+        angle.at<uchar>(i, j) = 45;
+      else if(abs(a_tan) >= 2.41421)
+        angle.at<uchar>(i, j) = 90;
+      else if(a_tan > -2.41421 && a_tan < -0.414214)
         angle.at<uchar>(i, j) = 135;
+      // cout << "[" << i << "," << j << "]" << (int)angle.at<uchar>(i, j) << ":" << I.at<Vec2d>(i, j) << endl, cin.get();
     }
   }
   // 非极大值抑制 
-  copyMakeBorder(edge, edge, 1, 1, 1, 1, BORDER_CONSTANT, 0.0);
-  for(int i = 1; i < edge.rows-1; i++) {
-    for(int j = 1; j < edge.cols-1; j++) {
+  copyMakeBorder(edge, edge, 1, 1, 1, 1, BORDER_CONSTANT, Scalar::all(0));
+  for(int i = 0; i < I.rows; i++) {
+    for(int j = 0; j < I.cols; j++) {
+      int dx[2], dy[2];
       if(angle.at<uchar>(i, j) == 0) {
-        if(edge.at<double>(i, j) < edge.at<double>(i, j-1) || edge.at<double>(i, j) < edge.at<double>(i, j+1))
-          edge.at<double>(i, j) = 0;
+        dx[0] = -1, dx[1] = 1;
+        dy[0] = dy[1] = 0;
       }
       else if(angle.at<uchar>(i, j) == 45) {
-        if(edge.at<double>(i, j) < edge.at<double>(i-1, j-1) || edge.at<double>(i, j) < edge.at<double>(i+1, j+1))
-          edge.at<double>(i, j) = 0;
+        dx[0] = dy[0] = -1;
+        dx[1] = dy[1] = 1;
       }
       else if(angle.at<uchar>(i, j) == 90) {
-        if(edge.at<double>(i, j) < edge.at<double>(i-1, j) || edge.at<double>(i, j) < edge.at<double>(i+1, j))
-          edge.at<double>(i, j) = 0;
+        dy[0] = -1, dy[1] = 1;
+        dx[0] = dx[1] = 0;
       }
-      else if(angle.at<uchar>(i, j) == 135){
-        if(edge.at<double>(i, j) < edge.at<double>(i-1, j+1) || edge.at<double>(i, j) < edge.at<double>(i+1, j-1))
-          edge.at<double>(i, j) = 0;
+      else if(angle.at<uchar>(i, j) == 135) {
+        dx[0] = dy[1] = 1;
+        dx[1] = dy[0] = -1;
       }
+      else{
+        continue;
+      }
+      if(_max(edge.at<double>(i+1, j+1), edge.at<double>(i+1+dy[0], j+1+dx[0]), edge.at<double>(i+1+dy[1], j+1+dx[1])) != edge.at<double>(i+1, j+1))
+        edge.at<double>(i+1, j+1) = 0;
     }
   }
   edge = edge(Range(1, edge.rows-1), Range(1, edge.cols-1));
   // 格式转化
-  normalize(edge, edge, 0, 255, NORM_MINMAX, CV_8U);
+  edge.convertTo(edge, CV_8U);
+  // normalize(edge, edge, 0, 255, NORM_MINMAX, CV_8U);
   // 将 edge 二值化
   for(int i = 0; i < edge.rows; i++) {
     for(int j = 0; j < edge.cols; j++) {
-      if(edge.at<uchar>(i, j) < 30) 
+      if(edge.at<uchar>(i, j) < LT) 
         edge.at<uchar>(i, j) = 0;
-      if(edge.at<uchar>(i, j) > 100) 
+      if(edge.at<uchar>(i, j) >  HT) 
         edge.at<uchar>(i, j) = 255;
     }
   }
   for(int i = 0; i < edge.rows; i++) {
     for(int j = 0; j < edge.cols; j++) {
-      if(edge.at<uchar>(i, j) > 0) {
-        for(int di = -1; di < 2; di++)
-          for(int dj = -1; dj < 2; dj++)
-            if(!di && !dj)
-              continue;
-            else if(edge.at<uchar>(i, j) < 255 || edge.at<uchar>(i+di, j+dj) == 255)
-              edge.at<uchar>(i, j) = 255;
+      for(int di = -1; di < 2; di++) {
+        for(int dj = -1; dj < 2; dj++) {
+          if(!edge.at<uchar>(i, j) || edge.at<uchar>(i, j) == 255)
+            continue;
+          if(edge.at<uchar>(i+di, j+dj) == 255) 
+            edge.at<uchar>(i, j) = 255;
+        }
       }
+      if(edge.at<uchar>(i, j) != 255)
+        edge.at<uchar>(i, j) = 0;
     }
   }
+  // 显示图像
+  imshow("edge", edge);
+  imshow("angle", angle);
   return edge;
 }
 
-Mat houghTrans(const Mat &I) {
+Mat houghVote(const Mat &I) {
   double rou, angle;
   double r_max = sqrt(I.rows*I.rows + I.cols*I.cols);
   Mat T = Mat::zeros((int)r_max*2, 180, CV_8U);
@@ -174,13 +207,12 @@ Mat houghTrans(const Mat &I) {
         continue;
       for(int t = 0; t < 180; t++) {
         angle = CV_PI * ((double)t/180.0);
-        rou = (double)x*cos(angle) + (double)y*sin(angle) + r_max;
-        // cout << "[" << y << "," << x << "]:";
-        // cout << (int)rou << " " << t << endl; cin.get();
+        rou = x*cos(angle) + y*sin(angle) + r_max;
         T.at<uchar>((int)rou, t)++;
       }
     }
   }
+  imshow("houghtrans", T);
   return T;
 }
 
@@ -196,15 +228,15 @@ vector<Elemt> getNMS(const Mat &I, unsigned long long st_size) {
   vector<Elemt> result;
   multiset<Elemt> st;
   Mat T = I.clone();
+  // 找出局部最大的前 10 个值
   for(int i = 0; i < I.rows; i++) {
     for(int j = 0; j < I.cols; j++) {
-      for(int u = -1; u < 2; u++) {
-        for(int v = -1; v < 2; v++) {
-          if(!u && !v)
-            continue;
-          if(T.at<uchar>(i+u, j+v) > T.at<uchar>(i, j)) {
+      for(int dy = -1; dy < 2; dy++) {
+        for(int dx = -1; dx < 2; dx++) {
+          int u = borderInterpolate(i+dy, I.rows, BORDER_WRAP);
+          int v = borderInterpolate(j+dx, I.cols, BORDER_WRAP);
+          if(T.at<uchar>(u, v) > T.at<uchar>(i, j)) {
             T.at<uchar>(i, j) = 0;
-            break;
           }
         }
       }
@@ -231,14 +263,15 @@ Mat houghInvTrans(const Mat &I, vector<Elemt> p_list) {
   Mat T = I.clone();
   // i:val->vote number; y->rou ; x->t
   for(const auto& i : p_list) {
+    double theta = CV_PI * ((double)i.x/180.0);
+    if(!sin(theta) || !cos(theta))
+      continue;
     for(int x = 0; x < I.cols; x++) {
-      double theta = CV_PI * ((double)i.x/180.0);
       int y = - cos(theta) / sin(theta) * x + (i.y-r_max) / sin(theta);
       if(y >= 0 && y < I.rows)
         T.at<Vec3b>(y, x) = Vec3b(0, 0, 255);
     }
     for(int y = 0; y < I.rows; y++) {
-      double theta = CV_PI * ((double)i.x/180.0);
       int x = sin(theta) / cos(theta) * y + (i.y-r_max) / cos(theta);
       if(x >= 0 && x < I.cols)
         T.at<Vec3b>(y, x) = Vec3b(0, 0, 255);
@@ -259,9 +292,9 @@ int main() {
   // Sobel 滤波
   Mat B = sobelFilter(A);
   // 梯度量化
-  Mat C = getEdge(B);
+  Mat C = getEdge(B, 60, 130);
   // Hough 变换
-  Mat D = houghTrans(C);
+  Mat D = houghVote(C);
   // NMS 求局部最大值
   vector<Elemt> E = getNMS(D, 10);
   // Hough 逆变换
