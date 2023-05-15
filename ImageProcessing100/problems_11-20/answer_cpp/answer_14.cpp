@@ -2,16 +2,7 @@
  * @Author: AIkikaze wenwenziy@163.com
  * @Date: 2023-05-04 20:33:54
  * @LastEditors: AIkikaze wenwenziy@163.com
- * @LastEditTime: 2023-05-15 15:16:19
- * @FilePath: /C++-playground/ImageProcessing100/problems_11-20/answer_cpp/answer_14.cpp
- * @Description: 
- * 
- */
-/*
- * @Author: AIkikaze wenwenziy@163.com
- * @Date: 2023-05-04 20:33:54
- * @LastEditors: AIkikaze wenwenziy@163.com
- * @LastEditTime: 2023-05-15 15:16:08
+ * @LastEditTime: 2023-05-15 15:17:15
  * @FilePath: /C++-playground/ImageProcessing100/problems_11-20/answer_cpp/answer_14.cpp
  * @Description: 
  * 
