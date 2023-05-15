@@ -1,9 +1,12 @@
 /*
-author: wenzy
-modified date: 20230502
-target: implement the Gaussian filter (3 × 3, standard deviation 1.3) and 
-remove the noise of imori_noise.jpg .
-*/
+ * @Author: AIkikaze wenwenziy@163.com
+ * @Date: 2023-05-04 20:33:54
+ * @LastEditors: AIkikaze wenwenziy@163.com
+ * @LastEditTime: 2023-05-15 15:15:43
+ * @FilePath: /C++-playground/ImageProcessing100/problems_01-10/answer_cpp/answer_09.cpp
+ * @Description: 
+ * 
+ */
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>

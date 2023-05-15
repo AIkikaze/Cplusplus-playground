@@ -1,8 +1,12 @@
 /*
-author: wenzy
-modified date: 20230502
-target: Implement the Sobel filter (3x3).
-*/
+ * @Author: AIkikaze wenwenziy@163.com
+ * @Date: 2023-05-04 10:53:37
+ * @LastEditors: AIkikaze wenwenziy@163.com
+ * @LastEditTime: 2023-05-10 08:52:40
+ * @FilePath: /C++-playground/ImageProcessing100/problems_11-20/answer_cpp/answer_15.cpp
+ * @Description: 
+ * 
+ */
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
