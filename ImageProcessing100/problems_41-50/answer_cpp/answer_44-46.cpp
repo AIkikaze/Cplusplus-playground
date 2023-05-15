@@ -1,9 +1,9 @@
 /*
  * @Author: AIkikaze wenwenziy@163.com
- * @Date: 2023-05-10 08:54:37
+ * @Date: 2023-05-10 14:10:36
  * @LastEditors: AIkikaze wenwenziy@163.com
- * @LastEditTime: 2023-05-15 13:34:55
- * @FilePath: \Cplusplus-playground\ImageProcessing100\problems_41-50\answer_cpp\answer_41-43.cpp
+ * @LastEditTime: 2023-05-15 11:22:19
+ * @FilePath: \Cplusplus-playground\ImageProcessing100\problems_41-50\answer_cpp\answer_44-46.cpp
  * @Description: 
  * 
  */
@@ -12,8 +12,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 #include <iostream>
-#include <vector>
-#include <cmath>
+#include <set>
 #define _max(a, b, c) fmax(a, fmax(b, c))
 using namespace std;
 using namespace cv;
@@ -108,7 +107,7 @@ Mat sobelFilter(const Mat &I) {
   135^o \in [-2.41421, -0.414214]
 */
 // 对经过 sobel 滤波的差分矩阵进行量化绘图
-void gradPlot(const Mat &I, int LT = 60, int HT = 100) {
+Mat getEdge(const Mat &I, int LT = 60, int HT = 100) {
   // 初始化 梯度矩阵 和 方向角矩阵
   Mat edge = Mat::zeros(I.rows, I.cols, CV_64F);
   Mat angle = Mat::zeros(I.rows, I.cols, CV_8U);
@@ -117,7 +116,7 @@ void gradPlot(const Mat &I, int LT = 60, int HT = 100) {
     for(int j = 0; j < I.cols; j++) {
       edge.at<double>(i, j) = sqrt(pow(I.at<Vec2d>(i, j)[0], 2) + pow(I.at<Vec2d>(i, j)[1], 2));
       if(edge.at<double>(i, j) < 1.0) {
-        angle.at<uchar>(i, j) = 175;
+        angle.at<uchar>(i, j) = 0;
         continue;
       }
       if(!I.at<Vec2d>(i, j)[1]) {
@@ -166,7 +165,8 @@ void gradPlot(const Mat &I, int LT = 60, int HT = 100) {
   }
   edge = edge(Range(1, edge.rows-1), Range(1, edge.cols-1));
   // 格式转化
-  normalize(edge, edge, 0, 255, NORM_MINMAX, CV_8U);
+  edge.convertTo(edge, CV_8U);
+  // normalize(edge, edge, 0, 255, NORM_MINMAX, CV_8U);
   // 将 edge 二值化
   for(int i = 0; i < edge.rows; i++) {
     for(int j = 0; j < edge.cols; j++) {
@@ -193,28 +193,115 @@ void gradPlot(const Mat &I, int LT = 60, int HT = 100) {
   // 显示图像
   imshow("edge", edge);
   imshow("angle", angle);
+  return edge;
+}
+
+Mat houghVote(const Mat &I) {
+  double rou, angle;
+  double r_max = sqrt(I.rows*I.rows + I.cols*I.cols);
+  Mat T = Mat::zeros((int)r_max*2, 180, CV_8U);
+  // 计算票数统计
+  for(int y = 0; y < I.rows; y++) {
+    for(int x = 0; x < I.cols; x++) {
+      if(!I.at<uchar>(y, x))
+        continue;
+      for(int t = 0; t < 180; t++) {
+        angle = CV_PI * ((double)t/180.0);
+        rou = x*cos(angle) + y*sin(angle) + r_max;
+        T.at<uchar>((int)rou, t)++;
+      }
+    }
+  }
+  imshow("houghtrans", T);
+  return T;
+}
+
+struct Elemt {
+  int val, y, x;
+  Elemt(int v, int a, int b): val(v), y(a), x(b) {}
+  bool operator<(const Elemt& other) const {
+        return val < other.val;
+  }
+};
+
+vector<Elemt> getNMS(const Mat &I, unsigned long long st_size) {
+  vector<Elemt> result;
+  multiset<Elemt> st;
+  Mat T = I.clone();
+  // 找出局部最大的前 10 个值
+  for(int i = 0; i < I.rows; i++) {
+    for(int j = 0; j < I.cols; j++) {
+      for(int dy = -2; dy < 3; dy++) {
+        for(int dx = -2; dx < 3; dx++) {
+          int u = borderInterpolate(i+dy, I.rows, BORDER_WRAP);
+          int v = borderInterpolate(j+dx, I.cols, BORDER_WRAP);
+          if(T.at<uchar>(u, v) > T.at<uchar>(i, j)) {
+            T.at<uchar>(i, j) = 0;
+          }
+        }
+      }
+      if(!T.at<uchar>(i, j)) 
+        continue;
+      st.insert(Elemt(T.at<uchar>(i, j), i, j));
+      if(st.size() > st_size)
+        st.erase(st.begin()); // 移除最小元素
+    }
+  }
+  T.setTo(0);
+  while(st.size() > 0) {
+    Elemt tmp = (*st.begin());
+    T.at<uchar>(tmp.y, tmp.x) = tmp.val;
+    result.push_back(tmp);
+    st.erase(st.begin());
+  }
+  imshow("NMS", T);
+  return result;
+}
+
+Mat houghInvTrans(const Mat &I, vector<Elemt> p_list) {
+  double r_max = sqrt(I.rows*I.rows + I.cols*I.cols);
+  Mat T = I.clone();
+  // i:val->vote number; y->rou ; x->t
+  for(const auto& i : p_list) {
+    double theta = CV_PI * ((double)i.x/180.0);
+    if(sin(theta)) 
+      for(int x = 0; x < I.cols; x++) {
+        int y = - cos(theta) / sin(theta) * x + (i.y-r_max) / sin(theta);
+        if(y >= 0 && y < I.rows)
+          T.at<Vec3b>(y, x) = Vec3b(0, 0, 255);
+      }
+    if(cos(theta))
+      for(int y = 0; y < I.rows; y++) {
+        int x = - sin(theta) / cos(theta) * y + (i.y-r_max) / cos(theta);
+        if(x >= 0 && x < I.cols)
+          T.at<Vec3b>(y, x) = Vec3b(0, 0, 255);
+      }
+  }
+  return T;
 }
 
 int main() {
-  // 读取图像
   Mat img = imread("../imagelib/thorino.jpg", IMREAD_COLOR);
   Mat I = img.clone();
-  // 对图像进行灰度化处理
+  // 灰度化
   cvtColor(I, I, COLOR_BGR2GRAY);
   // 格式转换
   I.convertTo(I, CV_64F);
   // 高斯滤波
   Mat A = gaussianFilter(I, Size(5, 5), 1.4);
+  // Sobel 滤波
   Mat B = sobelFilter(A);
+  // 梯度量化
+  Mat C = getEdge(B, 50, 130);
+  // Hough 变换
+  Mat D = houghVote(C);
+  // NMS 求局部最大值
+  vector<Elemt> E = getNMS(D, 10);
+  // Hough 逆变换
+  Mat F = houghInvTrans(img, E);
   // 显示图像
   imshow("img", img);
-  // 我自己调到 60-100 比较合适
-  // gradPlot(B);
-  while(1) {
-    int HT, LT;
-    cin >> LT >> HT;
-    gradPlot(B, LT, HT);
-    waitKey(0);
-  }
+  imshow("Hough", F);
+  waitKey();
   return 0;
 }

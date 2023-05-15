@@ -1,22 +1,126 @@
-/*
- * @Author: AIkikaze wenwenziy@163.com
- * @Date: 2023-05-10 14:10:36
- * @LastEditors: AIkikaze wenwenziy@163.com
- * @LastEditTime: 2023-05-11 14:29:27
- * @FilePath: \Cplusplus-playground\ImageProcessing100\problems_41-50\answer_cpp\answer_44.cpp
- * @Description: 
- * 
- */
 #include <opencv2/core.hpp>
-#include <opencv2/imgcodecs.hpp>
-#include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/imgcodecs.hpp>
 #include <iostream>
-#include <set>
 #define _max(a, b, c) fmax(a, fmax(b, c))
 using namespace std;
 using namespace cv;
 
+struct grayHist {
+  vector<int> val;
+  grayHist(int base) {
+    val = vector<int>(base, 0);
+  }
+  void makeHist(const Mat &I) {
+    CV_Assert(I.type() == CV_8U);
+    for(int i = 0; i < I.rows; i++)
+      for(int j = 0; j < I.cols; j++)
+        val[(int)I.at<uchar>(i, j)]++;
+  }
+  uchar OstuMethod() {
+    int num_tol = 0;
+    long sum_tol = 0;
+    int num_0 = 0;
+    long sum_0 = 0;
+    float mean_0 = 0.0f;
+    float mean_1 = 0.0f;
+    float w_0 = 0.0f;
+    float s_inter = 0.0f;
+    float s_inter_max = 0.0f;
+    uchar bin_threshold_l = 0;
+    uchar bin_threshold_r = 0;
+    // 计算 numTol, sumTol
+    for(int i = 0; i < 256; i++) 
+      num_tol += val[i], sum_tol += i*val[i];
+    // 计算并记录 s_inter, s_inter_max 对应的灰度值
+    for(int t = 1; t < 256; t++) {
+      num_0 = 0;
+      sum_0 = 0;
+      for(int i = 0; i < t; i++)
+        num_0 += val[i], sum_0 += i*val[i];
+      mean_0 = (float)sum_0 / num_0;
+      mean_1 = (float)(sum_tol - sum_0) / (num_tol - num_0);
+      w_0 = (float)num_0 / num_tol;
+      s_inter = w_0 * (1 - w_0) * (mean_0 - mean_1) * (mean_0 - mean_1);
+      if(s_inter > s_inter_max) {
+        s_inter_max = s_inter;
+        bin_threshold_l = t;
+        bin_threshold_r = t;
+      }
+      else if(s_inter == s_inter_max) 
+        bin_threshold_r = t;
+    }
+    return (bin_threshold_l+bin_threshold_r)/2;
+  }
+};
+
+Mat binarize(const Mat &I, uchar bin_t) {
+  Mat T = Mat::zeros(I.rows, I.cols, CV_8U);
+  for(int i = 0; i < I.rows; i++) {
+    for(int j = 0; j < I.cols; j++) {
+      if(I.at<uchar>(i, j) > bin_t)
+        T.at<uchar>(i, j) = 255;
+      else 
+        T.at<uchar>(i, j) = 0;
+    }
+  }
+  return T;
+}
+
+Mat dilate(const Mat &I) {
+  int dy[] = { 0, 0, 1, -1 };
+  int dx[] = { 1, -1, 0, 0 };
+  Mat T = I.clone();
+  for(int i = 0; i < I.rows; i++) {
+    for(int j = 0; j < I.cols; j++) {
+      if(!I.at<uchar>(i, j))
+        continue;
+      for(int k = 0; k < 4; k++) {
+        if(i+dy[k] < 0 || i+dy[k] >= I.rows || j+dx[k] < 0 || j+dx[k] >= I.cols)
+          continue;
+        if(!I.at<uchar>(i+dy[k], j+dx[k]))
+          T.at<uchar>(i, j) = 0;
+      }
+    }
+  }
+  return T;
+}
+
+Mat erode(const Mat &I) {
+  int dy[] = { 0, 0, 1, -1 };
+  int dx[] = { 1, -1, 0, 0 };
+  Mat T = I.clone();
+  for(int i = 0; i < I.rows; i++) {
+    for(int j = 0; j < I.cols; j++) {
+      if(I.at<uchar>(i, j))
+        continue;
+      for(int k = 0; k < 4; k++) {
+        if(i+dy[k] < 0 || i+dy[k] >= I.rows || j+dx[k] < 0 || j+dx[k] >= I.cols)
+          continue;
+        if(I.at<uchar>(i+dy[k], j+dx[k]) == 255)
+          T.at<uchar>(i, j) = 255;
+      }
+    }
+  }
+  return T;
+}
+
+Mat closing(const Mat &I, int times) {
+  Mat T = I.clone();
+  while(times > 0) {
+    // 腐蚀 Erode
+    T = erode(T);
+    // 膨胀 Dilate
+    T = dilate(T);
+    times--;
+  }
+  return T;
+}
+
+/* --- Canny 边缘检测 --- */ 
+
+// 高斯滤波
 Mat gaussianFilter(const Mat &I, Size k_size, double Sigma) {
   // 变常量声明、初始化
   Mat T = Mat::zeros(I.rows, I.cols, CV_64F);
@@ -107,7 +211,7 @@ Mat sobelFilter(const Mat &I) {
   135^o \in [-2.41421, -0.414214]
 */
 // 对经过 sobel 滤波的差分矩阵进行量化绘图
-Mat getEdge(const Mat &I, int LT = 60, int HT = 100) {
+Mat gradPlot(const Mat &I, int LT = 60, int HT = 100) {
   // 初始化 梯度矩阵 和 方向角矩阵
   Mat edge = Mat::zeros(I.rows, I.cols, CV_64F);
   Mat angle = Mat::zeros(I.rows, I.cols, CV_8U);
@@ -116,7 +220,7 @@ Mat getEdge(const Mat &I, int LT = 60, int HT = 100) {
     for(int j = 0; j < I.cols; j++) {
       edge.at<double>(i, j) = sqrt(pow(I.at<Vec2d>(i, j)[0], 2) + pow(I.at<Vec2d>(i, j)[1], 2));
       if(edge.at<double>(i, j) < 1.0) {
-        angle.at<uchar>(i, j) = 0;
+        angle.at<uchar>(i, j) = 175;
         continue;
       }
       if(!I.at<Vec2d>(i, j)[1]) {
@@ -190,118 +294,27 @@ Mat getEdge(const Mat &I, int LT = 60, int HT = 100) {
         edge.at<uchar>(i, j) = 0;
     }
   }
-  // 显示图像
-  imshow("edge", edge);
-  imshow("angle", angle);
   return edge;
 }
-
-Mat houghVote(const Mat &I) {
-  double rou, angle;
-  double r_max = sqrt(I.rows*I.rows + I.cols*I.cols);
-  Mat T = Mat::zeros((int)r_max*2, 180, CV_8U);
-  // 计算票数统计
-  for(int y = 0; y < I.rows; y++) {
-    for(int x = 0; x < I.cols; x++) {
-      if(!I.at<uchar>(y, x))
-        continue;
-      for(int t = 0; t < 180; t++) {
-        angle = CV_PI * ((double)t/180.0);
-        rou = x*cos(angle) + y*sin(angle) + r_max;
-        T.at<uchar>((int)rou, t)++;
-      }
-    }
-  }
-  imshow("houghtrans", T);
-  return T;
-}
-
-struct Elemt {
-  int val, y, x;
-  Elemt(int v, int a, int b): val(v), y(a), x(b) {}
-  bool operator<(const Elemt& other) const {
-        return val < other.val;
-  }
-};
-
-vector<Elemt> getNMS(const Mat &I, unsigned long long st_size) {
-  vector<Elemt> result;
-  multiset<Elemt> st;
-  Mat T = I.clone();
-  // 找出局部最大的前 10 个值
-  for(int i = 0; i < I.rows; i++) {
-    for(int j = 0; j < I.cols; j++) {
-      for(int dy = -1; dy < 2; dy++) {
-        for(int dx = -1; dx < 2; dx++) {
-          int u = borderInterpolate(i+dy, I.rows, BORDER_WRAP);
-          int v = borderInterpolate(j+dx, I.cols, BORDER_WRAP);
-          if(T.at<uchar>(u, v) > T.at<uchar>(i, j)) {
-            T.at<uchar>(i, j) = 0;
-          }
-        }
-      }
-      if(!T.at<uchar>(i, j)) 
-        continue;
-      st.insert(Elemt(T.at<uchar>(i, j), i, j));
-      if(st.size() > st_size)
-        st.erase(st.begin()); // 移除最小元素
-    }
-  }
-  T.setTo(0);
-  while(st.size() > 0) {
-    Elemt tmp = (*st.begin());
-    T.at<uchar>(tmp.y, tmp.x) = tmp.val;
-    result.push_back(tmp);
-    st.erase(st.begin());
-  }
-  imshow("NMS", T);
-  return result;
-}
-
-Mat houghInvTrans(const Mat &I, vector<Elemt> p_list) {
-  double r_max = sqrt(I.rows*I.rows + I.cols*I.cols);
-  Mat T = I.clone();
-  // i:val->vote number; y->rou ; x->t
-  for(const auto& i : p_list) {
-    double theta = CV_PI * ((double)i.x/180.0);
-    if(!sin(theta) || !cos(theta))
-      continue;
-    for(int x = 0; x < I.cols; x++) {
-      int y = - cos(theta) / sin(theta) * x + (i.y-r_max) / sin(theta);
-      if(y >= 0 && y < I.rows)
-        T.at<Vec3b>(y, x) = Vec3b(0, 0, 255);
-    }
-    for(int y = 0; y < I.rows; y++) {
-      int x = sin(theta) / cos(theta) * y + (i.y-r_max) / cos(theta);
-      if(x >= 0 && x < I.cols)
-        T.at<Vec3b>(y, x) = Vec3b(0, 0, 255);
-    }
-  }
-  return T;
-}
-
 int main() {
-  Mat img = imread("../imagelib/thorino.jpg", IMREAD_COLOR);
+  Mat img = imread("../imagelib/imori.jpg", IMREAD_COLOR);
   Mat I = img.clone();
-  // 灰度化
+  // 对图像进行灰度化处理
   cvtColor(I, I, COLOR_BGR2GRAY);
   // 格式转换
   I.convertTo(I, CV_64F);
   // 高斯滤波
-  Mat A = gaussianFilter(I, Size(5, 5), 1.4);
+  Mat A = gaussianFilter(I, Size(3, 3), 1.4);
   // Sobel 滤波
   Mat B = sobelFilter(A);
-  // 梯度量化
-  Mat C = getEdge(B, 60, 130);
-  // Hough 变换
-  Mat D = houghVote(C);
-  // NMS 求局部最大值
-  vector<Elemt> E = getNMS(D, 10);
-  // Hough 逆变换
-  Mat F = houghInvTrans(img, E);
+  // 计算边缘梯度
+  Mat C = gradPlot(B, 50, 100);
+  // 闭运算 closing
+  Mat D = closing(C, 1);
   // 显示图像
-  imshow("img", img);
-  imshow("Hough", F);
+  imshow("before", img);
+  imshow("edge", C);
+  imshow("closing operation", D);
   waitKey();
   return 0;
 }

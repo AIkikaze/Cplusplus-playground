@@ -9,6 +9,7 @@ target: Binarize the image using Ostu's methond
 #include <iostream>
 using namespace std;
 using namespace cv;
+
 struct grayHist {
   int BASE;
   int* val;
