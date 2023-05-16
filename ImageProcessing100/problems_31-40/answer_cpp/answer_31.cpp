@@ -2,7 +2,7 @@
  * @Author: AIkikaze wenwenziy@163.com
  * @Date: 2023-05-06 10:13:15
  * @LastEditors: AIkikaze wenwenziy@163.com
- * @LastEditTime: 2023-05-09 16:30:40
+ * @LastEditTime: 2023-05-15 14:21:32
  * @FilePath: \Cplusplus-playground\ImageProcessing100\problems_31-40\answer_cpp\answer_31.cpp
  * @Description: 
  * 
