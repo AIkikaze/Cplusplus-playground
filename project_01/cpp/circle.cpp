@@ -19,8 +19,7 @@ std::vector<cv::Point2d> stplist;
 std::vector<cv::Point> holelist;
 cv::Mat openedImage;
 
-std::vector<cv::Vec6d> DetectEllipse(const cv::Mat &grey, const float &scale)
-{
+std::vector<cv::Vec6d> DetectEllipse(const cv::Mat &grey, const float &scale) {
   cv::Mat temp;
   // 图像缩放
   if (scale < 1.0)
@@ -43,12 +42,10 @@ std::vector<cv::Vec6d> DetectEllipse(const cv::Mat &grey, const float &scale)
   std::vector<cv::Vec6d> ellipses;
   ed->detectEllipses(ellipses);
 
-  if (scale < 1.0)
-  {
+  if (scale < 1.0) {
     // 还原椭圆位置
     double s = 1.0 / scale;
-    for (auto &vec : ellipses)
-    {
+    for (auto &vec : ellipses) {
       // 还原椭圆尺寸
       for (int i = 0; i < 5; i++)
         vec[i] *= s;
@@ -136,7 +133,7 @@ void findCircle(const cv::Mat &I) {
   cv::imshow("outputImage", outputImage);
 }
 
-void onMouse(int event, int x, int y, int flags, void *userdata)
+void __onMouse(int event, int x, int y, int flags, void *userdata)
 {
   if (event == cv::EVENT_LBUTTONDOWN)
   {
@@ -188,13 +185,13 @@ void onMouse(int event, int x, int y, int flags, void *userdata)
   }
 }
 
-int main()
+void circle()
 {
   cv::Mat image = cv::imread("../imagelib/model_1.jpg", cv::IMREAD_GRAYSCALE);
   if (image.empty())
   {
     std::cout << "Failed to read image!" << std::endl;
-    return -1;
+    return;
   }
 
   // 应用盒式滤波
@@ -220,10 +217,10 @@ int main()
   cv::imshow("openedImage", openedImage);
 
   // 注册鼠标响应函数
-  cv::setMouseCallback("openedImage", onMouse, &openedImage);
+  cv::setMouseCallback("openedImage", __onMouse, &openedImage);
 
   std::cout << "等待任意键...关闭图像窗口" << std::endl;
   cv::waitKey();
 
-  return 0;
+  return;
 }

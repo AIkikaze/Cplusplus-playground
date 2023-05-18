@@ -2,6 +2,7 @@
 #define OPENCV_DETECTHOLES_HPP
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/ximgproc.hpp>
 #include <vector>
 #include <iostream>
 
@@ -19,27 +20,30 @@ public:
   }params;
 
   HoleDetector();
-  ~HoleDetector();
+  // ~HoleDetector();
 
   void setImage(const cv::Mat& image);
   void processImage();
   void drawResult();
-  void drwaHoleList();
+  void drawHoleList(const cv::String &winname, int flag);
   void addNewHole();
+  void copyHolelistTo(std::vector<cv::Point> &dst);
+  void copyHolelistImageTo(std::vector<cv::Mat> &dst);
+  int getSize();
 
 private:
-  cv::Mat pImage;
-  cv::Mat roiImage;
+  cv::Mat pImage, roiImage, holeImage;
   std::vector<cv::Point> holelist;
   std::vector<cv::Mat> holelist_image;
   bool selecting, afterProcess, holeFound;
   cv::Point start_point, end_point;
-  cv::Rect box_selecting:
+  cv::Rect box_selecting;
 
-  void onMouse(int event, int x, int y, int flags, void *userdata);
-  std::vector<cv::Vec6d> detectEllipse(const cv::Mat &grey, const float &scale);
-  void findHoles(const Mat &src, Mat &dst);
-  bool areCirclesApproximatelyConcentric(const std::vector<cv::Point2d> &circles, float deviationThreshold);
+  void __setMouseCallback(const cv::String &winname);
+  static void onMouse(int event, int x, int y, int flags, void *userdata);
+  std::vector<cv::Vec6d> detectEllipse(const cv::Mat &grey, const double &scale);
+  void findHoles();
+  bool areCirclesApproximatelyConcentric(const std::vector<cv::Point2d> &circles, double deviationThreshold);
 };
 
 

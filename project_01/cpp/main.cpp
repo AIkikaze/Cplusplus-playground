@@ -7,79 +7,95 @@
  * @Description:
  *
  */
+#include "detectHoles.hpp"
+#include "colorSegment.hpp"
 #include <opencv2/opencv.hpp>
-#include <iostream>
 #include <vector>
+#include <iostream>
 using namespace std;
+using namespace cv;
 
-int lasty = 0;
-int lastx = 0;
-void onMouse(int event, int x, int y, int flags, void *userdata) {
-  if (event == cv::EVENT_LBUTTONDOWN) {
-    cv::Mat *image = static_cast<cv::Mat *>(userdata);
-    cout << "point:" << y << "," << x << endl;
-    cout << "gray on point:" << (int)image->at<uchar>(y, x) << endl;
-    double dist = sqrt(pow(lastx - x, 2) + pow(lasty - y, 2));
-    cout << "dist from last to now:" << dist << endl;
-    lastx = x;
-    lasty = y;
-  }
+void colorbyParts(const Mat &src) {
+  // 创建颜色分割对象
+  ColorSegment cs;
+  // 初始化
+  cs.setImage(src);
+  // 图像处理
+  cs.processImage();
+  // 色彩检查
+  cs.colorCheck();
+  // 添加颜色范围
+  cs.addColorRange("green", Scalar(55, 90, 60), Scalar(65, 220, 140));
+  // 绘制颜色分割区域
+  cs.createColorSegment();
 }
 
-int main()
-{
-  cv::Mat image = cv::imread("../imagelib/test.TIFF", cv::IMREAD_GRAYSCALE);
-  cv::imshow("Original Image", image);
+void holesMatch(const Mat &model_image, const Mat &target_image) {
+  // 创建圆孔检测对象
+  HoleDetector hd_model, hd_target;
 
-  // 应用盒式滤波
-  cv::Mat filteredImage;
-  cv::blur(image, filteredImage, cv::Size(13, 13)); // 使用3x3的盒式滤波器
+  // 默认选取 4 个对应点
+  int num_match = 4;
+  // 储存定位孔位置
+  vector<Point> srcPoints, dstPoints;
 
-  // 应用Otsu二值化
-  cv::Mat binaryImage;
-  cv::threshold(filteredImage, binaryImage, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+  // 对 target 图片进行圆孔定位
+  hd_target.setImage(target_image);
+  hd_target.processImage();
+  while(hd_target.getSize() < num_match)
+    hd_target.addNewHole();
+  hd_target.drawHoleList("holes in targetImage", 1);
+  hd_target.copyHolelistTo(dstPoints);
 
-  // 形态学处理
-  int n = 5;
-  cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-  for (int i = 0; i < n; i++)
-  {
-    cv::morphologyEx(binaryImage, binaryImage, cv::MORPH_OPEN, kernel);
-    cv::morphologyEx(binaryImage, binaryImage, cv::MORPH_CLOSE, kernel);
+  // 对 model 图片进行圆孔定位
+  hd_model.setImage(model_image);
+  hd_model.processImage();
+  while(hd_model.getSize() < num_match)
+    hd_model.addNewHole();
+  hd_model.drawHoleList("holes in modelImage", 1);
+  hd_model.copyHolelistTo(srcPoints);
+
+  // 计算仿射变换
+  Mat affineMatrix;
+  Mat inliers; 
+  affineMatrix = estimateAffine2D(srcPoints, dstPoints, inliers);
+
+  // 输出计算结果
+  cout << "--------- 仿射变换计算完成 -----------" << endl;
+  for(int i = 0; i < num_match; i++) {
+    cout << "对应点[" << i+1 << "]:" << srcPoints[i] << " " << dstPoints[i] << endl;
   }
-  cv::imshow("Opened Image", binaryImage);
-  cv::setMouseCallback("Opened Image", onMouse, &binaryImage);
-  cv::waitKey();
+  cout << "求得仿射变换矩阵：" << endl <<  affineMatrix << endl;
 
-  // // 寻找轮廓
-  // cv::Mat contourImage = cv::Mat::zeros(image.rows, image.cols, CV_8UC3);
-  // // cv::cvtColor(contourImage, contourImage, cv::COLOR_GRAY2BGR);
-  // std::vector<std::vector<cv::Point>> contours;
-  // std::vector<cv::Vec4i> hierarchy;
-  // cv::findContours(binaryImage, contours, hierarchy, cv::RETR_CCOMP, cv::CHAIN_APPROX_SIMPLE);
+  // 进行图像配准
+  // 进行仿射变换
+  Mat warpedImage;
+  warpAffine(model_image, warpedImage, affineMatrix, target_image.size());
 
-  // std::vector<std::vector<cv::Point>> approxContours(contours.size());
-  // for (size_t i = 0; i < contours.size(); i++)
-  // {
-  //   double epsilon = 0.0001 * cv::arcLength(contours[i], true); // 设置逼近精度，这里使用轮廓周长的1%
-  //   cv::approxPolyDP(contours[i], approxContours[i], epsilon, true);
-  // }
+  // 色彩叠加
+  double alpha = 0.5;  // 图像 model 的权重
+  Mat blendedImage;
+  addWeighted(warpedImage, alpha, target_image, 1 - alpha, 0, blendedImage);
 
-  // // 遍历轮廓并绘制边界
-  // for (int i = 0; i < approxContours.size(); i++)
-  // {
-  //   // 绘制外部边界
-  //   cv::drawContours(contourImage, approxContours, i, cv::Scalar(0, 0, 255), 2, cv::LINE_8, hierarchy, 0);
-  //   // 绘制内部边界
-  //   if (hierarchy[i][2] != -1)
-  //   {
-  //     cv::drawContours(contourImage, approxContours, hierarchy[i][2], cv::Scalar(0, 255, 0), 2, cv::LINE_8, hierarchy, 0);
-  //   }
-  // }
+  // 显示图像
+  namedWindow("blendedImage", WINDOW_NORMAL);
+  imshow("blendedImage", blendedImage);
 
+  // 等待键入
+  waitKey();
+  destroyAllWindows();
+}
 
-  // cv::imshow("Contour Image", contourImage);
-  // cv::waitKey(0);
+int main() {
+  // 读取图像
+  Mat model = imread("../imagelib/model_1.jpg", IMREAD_COLOR);
+  Mat target = imread("../imagelib/test.TIFF", IMREAD_GRAYSCALE);
+
+  // 颜色分割
+  colorbyParts(model);
+
+  // 通过圆孔定位进行图像配准
+  // holesMatch(model, target);
 
   return 0;
 }

@@ -26,7 +26,7 @@ void onMouse(int event, int x, int y, int flags, void *userdata)
   }
 }
 
-int main()
+void model()
 {
   cv::Mat image = cv::imread("../imagelib/model_1.jpg", cv::IMREAD_COLOR);
 
@@ -79,7 +79,7 @@ int main()
   }
 
   // 遍历轮廓并绘制边界
-  for (int i = 0; i < approxContours.size(); i++)
+  for (size_t i = 0; i < approxContours.size(); i++)
   {
     // 绘制外部边界
     cv::drawContours(image, approxContours, i, cv::Scalar(0, 255, 0), 2, cv::LINE_8, hierarchy, 0);
@@ -95,5 +95,5 @@ int main()
   cv::imwrite("../imagelib/red_1.jpg", image);
   waitKey(0);
 
-  return 0;
+  return;
 }
