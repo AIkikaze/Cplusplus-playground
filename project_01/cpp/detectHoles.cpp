@@ -16,7 +16,8 @@ HoleDetector::HoleDetector() {
 }
 
 void HoleDetector::setImage(const Mat &image) {
-  pImage = image.clone();
+  CV_Assert(image.type() == CV_8UC3);
+  cvtColor(image, pImage, COLOR_BGR2GRAY);
 }
 
 void HoleDetector::processImage() {
@@ -87,6 +88,8 @@ void HoleDetector::addNewHole() {
   __setMouseCallback("holedetect");
   // 等待键盘
   waitKey();
+  // 销毁窗口
+  destroyWindow("holedetect");
 }
 
 void HoleDetector::copyHolelistTo(vector<Point> &dst) {
@@ -193,6 +196,8 @@ void HoleDetector::findHoles() {
   CV_Assert(!roiImage.empty());
   CV_Assert(holeImage.type() == CV_8UC3);
   CV_Assert(roiImage.type() == CV_8U);
+  // 创建 holeImage 的备份
+  Mat _holeImage = holeImage.clone();
   // 创建圆心序列
   vector<Point2d> center_list;
   // 圆形检测
@@ -219,6 +224,7 @@ void HoleDetector::findHoles() {
   // 判断同心圆
   bool flag = areCirclesApproximatelyConcentric(center_list, 2.0);
   if(!flag) {
+    holeImage = _holeImage;
     cout << "请重新绘制 roi 区域..." << endl;
     return;
   }

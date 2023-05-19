@@ -45,6 +45,7 @@ void model()
 
   cv::Scalar lowerRed1 = cv::Scalar(0, 150, 150); // 红色的下界
   cv::Scalar upperRed1 = cv::Scalar(6, 220, 200); // 红色的上界
+  std::cout << lowerRed1 << " " << upperRed1 << std::endl;
 
   cv::Mat mask1;
   cv::inRange(hsvImage, lowerRed1, upperRed1, mask1);
