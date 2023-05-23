@@ -15,7 +15,9 @@ class GeoMatch {
   void createGeoMatchModel(const cv::Mat &tempImage, double minContrast,
                            double maxContrast);
   cv::Mat getScoreMap();
-  float findGeoMatchModel(float minScore, float greediness);
+  void findGeoMatchModel(float minScore = 0.7f, float greediness = 0.8f);
+  void showModelDefined();
+  void showMatchResult(float lowestScore = 0.5f);
   void show();
 
  private:
@@ -28,9 +30,18 @@ class GeoMatch {
         : coordiante(xy), edgesXY(XY) {}
   };
 
-  cv::Mat sourceImage, tempImage, matchMat;
+  struct matchPoint {
+    cv::Point coordiante;
+    float score;
+    cv::Mat affineMatrix;
+    explicit matchPoint(cv::Point xy, float sc, cv::Mat afm = cv::Mat::zeros(3, 3, CV_32F))
+        : coordiante(xy), score(sc), affineMatrix(afm) {}
+  };
+
+  cv::Mat sourceImage, tempImage;
   std::vector<GeoMatch::coorGradient> gradVecList;
-  bool modelDefined;
+  std::vector<GeoMatch::matchPoint> matchPointList;
+  bool modelDefined, matchCompleted;
 };
 
 #endif  // OPENCV_GEOMATCH_HPP

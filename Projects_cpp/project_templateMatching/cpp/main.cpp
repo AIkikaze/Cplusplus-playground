@@ -10,10 +10,13 @@ int main() {
   gm.setTempImage(tempImage);
   gm.processImage();
   gm.createGeoMatchModel(50, 150);
+  gm.showModelDefined();
+  gm.showMatchResult();
 
   Mat ScoreMap;
   ScoreMap = gm.getScoreMap();
 
+  namedWindow("ScoreMap", WINDOW_NORMAL);
   imshow("ScoreMap", ScoreMap);
 
   waitKey();

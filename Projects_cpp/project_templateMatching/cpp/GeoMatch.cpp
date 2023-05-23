@@ -2,7 +2,10 @@
 using namespace std;
 using namespace cv;
 
-GeoMatch::GeoMatch() { modelDefined = false; }
+GeoMatch::GeoMatch() { 
+  modelDefined = false; 
+  matchCompleted = false;
+}
 
 void GeoMatch::setSourceImage(const cv::Mat &sImage) {
   sourceImage = sImage.clone();
@@ -20,8 +23,7 @@ void GeoMatch::processImage() {
     cvtColor(tempImage, tempImage, COLOR_BGR2GRAY);
 }
 
-void GeoMatch::createGeoMatchModel(double maxContrast,
-                                   double minContrast) {
+void GeoMatch::createGeoMatchModel(double maxContrast, double minContrast) {
   CV_Assert(!tempImage.empty());
 
   /// @variables:
@@ -118,19 +120,26 @@ void GeoMatch::createGeoMatchModel(double maxContrast,
         continue;
       for (int di = -1; di < 2; di++) {
         for (int dj = -1; dj < 2; dj++) {
-          if (edges.at<uchar>(i + di, j + dj) == 255) edges.at<uchar>(i, j) = 255;
+          if (edges.at<uchar>(i + di, j + dj) == 255)
+            edges.at<uchar>(i, j) = 255;
         }
       }
       if (edges.at<uchar>(i, j) != 255) edges.at<uchar>(i, j) = 0;
     }
   }
 
+  // namedWindow("edges", WINDOW_NORMAL);
+  // namedWindow("angles", WINDOW_NORMAL);
+  // imshow("edges", edges);
+  // imshow("angles", angles);
+  // waitKey();
+
   // 将 edges 矩阵中有效像素对应的坐标，以及 gx, gy 存入梯度序列
   for (int i = 0; i < edges.rows; i++) {
     for (int j = 0; j < edges.cols; j++) {
       if (!edges.at<uchar>(i, j)) continue;
-      gradVecList.push_back(
-          coorGradient(Point(i, j), Vec2f(gx.at<float>(i, j))));
+      gradVecList.push_back(coorGradient(
+          Point(j, i), Vec2f(gx.at<float>(i, j), gy.at<float>(i, j))));
     }
   }
 
@@ -237,7 +246,8 @@ void GeoMatch::createGeoMatchModel(const cv::Mat &tImage, double maxContrast,
         continue;
       for (int di = -1; di < 2; di++) {
         for (int dj = -1; dj < 2; dj++) {
-          if (edges.at<uchar>(i + di, j + dj) == 255) edges.at<uchar>(i, j) = 255;
+          if (edges.at<uchar>(i + di, j + dj) == 255)
+            edges.at<uchar>(i, j) = 255;
         }
       }
       if (edges.at<uchar>(i, j) != 255) edges.at<uchar>(i, j) = 0;
@@ -248,8 +258,8 @@ void GeoMatch::createGeoMatchModel(const cv::Mat &tImage, double maxContrast,
   for (int i = 0; i < edges.rows; i++) {
     for (int j = 0; j < edges.cols; j++) {
       if (!edges.at<uchar>(i, j)) continue;
-      gradVecList.push_back(
-          coorGradient(Point(i, j), Vec2f(gx.at<float>(i, j))));
+      gradVecList.push_back(coorGradient(
+          Point(j, i), Vec2f(gx.at<float>(i, j), gy.at<float>(i, j))));
     }
   }
 
@@ -289,21 +299,21 @@ Mat GeoMatch::getScoreMap() {
             v > sourceImage.cols - 1)
           continue;
 
-        if (sqrt(Gx.at<float>(u, v) * Gx.at<float>(u, v) + Gy.at<float>(u, v) * Gy.at<float>(u, v)) == 0)
+        if (sqrt(Gx.at<float>(u, v) * Gx.at<float>(u, v) +
+                 Gy.at<float>(u, v) * Gy.at<float>(u, v)) == 0)
           _gradSource = 0.0f;
         else
-          _gradSource = 1.0f / sqrt(Gx.at<float>(u, v) * Gx.at<float>(u, v) + Gy.at<float>(u, v) * Gy.at<float>(u, v));
+          _gradSource = 1.0f / sqrt(Gx.at<float>(u, v) * Gx.at<float>(u, v) +
+                                    Gy.at<float>(u, v) * Gy.at<float>(u, v));
         _gradTemp = 1.0f / sqrt(g.edgesXY[0] * g.edgesXY[0] +
                                 g.edgesXY[1] * g.edgesXY[1]);
 
         Sm.at<float>(i, j) +=
-            g.edgesXY[0] * Gx.at<float>(u, v) + g.edgesXY[1] * Gy.at<float>(u, v) * _gradTemp *
-            _gradSource;
+            (g.edgesXY[0] * Gx.at<float>(u, v) +
+            g.edgesXY[1] * Gy.at<float>(u, v)) * _gradTemp * _gradSource;
       }
       Sm.at<float>(i, j) /= gradVecList.size();
-      cout << Sm.at<float>(i, j) << endl;
-      cin.get();
-   }
+    }
   }
 
   normalize(Sm, Sm, 0, 255, NORM_MINMAX);
@@ -312,11 +322,11 @@ Mat GeoMatch::getScoreMap() {
   return Sm;
 }
 
-float GeoMatch::findGeoMatchModel(float minScore = 0.0f,
-                                  float greediness = 0.0f) {
+void GeoMatch::findGeoMatchModel(float minScore,
+                                 float greediness) {
   if (!modelDefined) {
     cout << "错误：模板未定义！" << endl;
-    return -1.0f;
+    return;
   }
 
   /// @variables:
@@ -331,10 +341,11 @@ float GeoMatch::findGeoMatchModel(float minScore = 0.0f,
                         : 1.0 / gradVecList.size();
   Mat Gx = Mat::zeros(sourceImage.rows, sourceImage.cols, CV_32F);
   Mat Gy = Mat::zeros(sourceImage.rows, sourceImage.cols, CV_32F);
+  if (!matchPointList.empty()) matchPointList.clear();
 
   // Sobel 计算源图像的一阶差分
-  Sobel(sourceImage, Gx, 1, 0, 3);
-  Sobel(sourceImage, Gy, 0, 1, 3);
+  Sobel(sourceImage, Gx, CV_32F, 1, 0, 3);
+  Sobel(sourceImage, Gy, CV_32F, 0, 1, 3);
 
   /*
   计算相似度，相似度公式为：
@@ -356,33 +367,88 @@ float GeoMatch::findGeoMatchModel(float minScore = 0.0f,
             v > sourceImage.cols - 1)
           continue;
 
-        if (sqrt(Gx.at<float>(u, v) * Gx.at<float>(u, v) + Gy.at<float>(u, v) * Gy.at<float>(u, v)) == 0)
+        if (sqrt(Gx.at<float>(u, v) * Gx.at<float>(u, v) +
+                 Gy.at<float>(u, v) * Gy.at<float>(u, v)) == 0)
           _gradSource = 0.0f;
         else
-          _gradSource = 1.0f / sqrt(Gx.at<float>(u, v) * Gx.at<float>(u, v) + Gy.at<float>(u, v) * Gy.at<float>(u, v));
+          _gradSource = 1.0f / sqrt(Gx.at<float>(u, v) * Gx.at<float>(u, v) +
+                                    Gy.at<float>(u, v) * Gy.at<float>(u, v));
         _gradTemp = 1.0f / sqrt(g.edgesXY[0] * g.edgesXY[0] +
                                 g.edgesXY[1] * g.edgesXY[1]);
 
         partialSum +=
-            g.edgesXY[0] * Gx.at<float>(u, v) + g.edgesXY[1] * Gy.at<float>(u, v) * _gradTemp *
-            _gradSource;
+            (g.edgesXY[0] * Gx.at<float>(u, v) +
+            g.edgesXY[1] * Gy.at<float>(u, v))* _gradTemp * _gradSource;
 
         partialScore = partialSum / sumOfCoords;
 
-        if (partialScore > min((minScore - 1) + normGreediness * sumOfCoords,
+        if (partialScore < min((minScore - 1) + normGreediness * sumOfCoords,
                                normMinScore * sumOfCoords))
-          ;
-        break;
+          break;
       }
 
       if (partialScore > resultScorce) {
-        cout << "Partial Score is :" << partialScore << endl;
+        matchCompleted = true;
+        matchPointList.push_back(
+            matchPoint(Point(j, i), partialScore, Mat::eye(3, 3, CV_32F)));
         resultScorce = partialScore;
       }
     }
   }
+}
 
-  return resultScorce;
+void GeoMatch::showModelDefined() {
+  if (!modelDefined) {
+    cout << "错误：模板未定义！" << endl;
+    return;
+  }
+
+  int minRL = min(tempImage.rows, tempImage.cols);
+  Mat modelImage;
+  cvtColor(tempImage, modelImage, COLOR_GRAY2BGR);
+
+  for (const auto &g : gradVecList) {
+    double dx = 0.1 * minRL * g.edgesXY[0] /
+                sqrt(g.edgesXY[0] * g.edgesXY[0] + g.edgesXY[1] * g.edgesXY[1]);
+    double dy = 0.1 * minRL * g.edgesXY[1] /
+                sqrt(g.edgesXY[0] * g.edgesXY[0] + g.edgesXY[1] * g.edgesXY[1]);
+    Point vecEnd = g.coordiante + Point((int)dy, (int)dx);
+    circle(modelImage, g.coordiante, 1, Scalar(0, 0, 255), -1);
+    arrowedLine(modelImage, g.coordiante, vecEnd, Scalar(0, 255, 0));
+  }
+
+  namedWindow("modelImage", WINDOW_NORMAL);
+  imshow("modelImage", modelImage);
+  waitKey();
+  destroyWindow("modelImage");
+}
+
+void GeoMatch::showMatchResult(float lowestScore) {
+  if (!modelDefined) {
+    cout << "错误：模板未定义！" << endl;
+    return;
+  } else if (!matchCompleted)
+    findGeoMatchModel();
+
+  Mat resultImage;
+  cvtColor(sourceImage, resultImage, COLOR_GRAY2BGR);
+
+  for (const auto &p : matchPointList) {
+    if(p.score < lowestScore) continue;
+    for (const auto &g : gradVecList) {
+      int u = p.coordiante.y + g.coordiante.y;
+      int v = p.coordiante.x + g.coordiante.x;
+      if (u < 0 || v < 0 || u > resultImage.rows - 1 ||
+          v > resultImage.cols - 1)
+        continue;
+      resultImage.at<Vec3b>(u, v) = Vec3b(0, 255, 0);
+    }
+  }
+
+  namedWindow("resultImage", WINDOW_NORMAL);
+  imshow("resultImage", resultImage);
+  waitKey();
+  destroyWindow("resultImage");
 }
 
 void GeoMatch::show() {
