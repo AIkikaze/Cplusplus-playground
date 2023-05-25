@@ -3,8 +3,8 @@ using namespace std;
 using namespace cv;
 
 int main() {
-  Mat tempImage = imread("../imagelib/mount.png", IMREAD_COLOR);
-  Mat sourceImage = imread("../imagelib/mounts.png", IMREAD_COLOR);
+  Mat tempImage = imread("../imagelib/Template.jpg", IMREAD_COLOR);
+  Mat sourceImage = imread("../imagelib/Search1.jpg", IMREAD_COLOR);
   GeoMatch gm;
   gm.setSourceImage(sourceImage);
   gm.setTempImage(tempImage);
