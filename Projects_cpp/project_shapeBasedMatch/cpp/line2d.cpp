@@ -17,7 +17,7 @@ const Mat &ImagePyramid::operator[](int index) const {
   return pyramid[index];
 }
 
-void ImagePyramid::buildPyramid(const Mat &src, int levels = 0) {
+void ImagePyramid::buildPyramid(const Mat &src, int levels) {
   Mat curImg = src.clone();
 
   // 裁剪图像到合适尺寸
@@ -45,14 +45,13 @@ shapeInfo_producer::shapeInfo_producer() {
   eps = line2d_eps;
 }
 
-shapeInfo_producer::shapeInfo_producer(const Mat &input_src,
-                                       Mat input_mask = Mat(),
-                                       bool padding = false)
+shapeInfo_producer::shapeInfo_producer(const Mat &input_src, Mat input_mask,
+                                       bool padding)
     : shapeInfo_producer() {
   CV_Assert(!input_src.empty());
   CV_Assert(input_mask.empty() || (input_src.size() == input_mask.size()));
   CV_Assert(input_mask.empty() || input_mask.type() == CV_8U);
-  // 当前图像已经扩充 0 边界
+  // 当前图像已经扩充边界
   if (padding) {
     src = input_src;
     if (input_mask.empty())
@@ -65,25 +64,22 @@ shapeInfo_producer::shapeInfo_producer(const Mat &input_src,
                                    input_src.cols * input_src.cols);
     // 扩充边界
     copyMakeBorder(input_src, src, border_max - input_src.rows / 2,
-                       border_max - input_src.rows / 2,
-                       border_max - input_src.cols / 2,
-                       border_max - input_src.cols / 2, BORDER_CONSTANT);
+                   border_max - input_src.rows / 2,
+                   border_max - input_src.cols / 2,
+                   border_max - input_src.cols / 2, BORDER_REPLICATE);
 
     if (input_mask.empty())
       mask = Mat(src.size(), CV_8U, Scalar(255));
     else  // 扩充掩图边界
       copyMakeBorder(input_mask, mask, border_max - input_mask.rows / 2,
-                         border_max - input_mask.rows / 2,
-                         border_max - input_mask.cols / 2,
-                         border_max - input_mask.cols / 2, BORDER_CONSTANT);
+                     border_max - input_mask.rows / 2,
+                     border_max - input_mask.cols / 2,
+                     border_max - input_mask.cols / 2, BORDER_CONSTANT);
   }
-  imshow("src", src);
-  imshow("mask", mask);
 }
 
-static void shapeInfo_producer::save_config(
-    const shapeInfo_producer &sip,
-    string path = "../data/sip_config.yaml") {
+void shapeInfo_producer::save_config(const shapeInfo_producer &sip,
+                                     string path) {
   FileStorage fs(path, FileStorage::WRITE);
 
   // 储存公有成员参数
@@ -112,9 +108,10 @@ static void shapeInfo_producer::save_config(
   fs.release();
 }
 
-static Ptr<shapeInfo_producer> shapeInfo_producer::load_config(
-    const Mat &input_src, Mat input_mask = Mat(),
-    bool padding = false, string path = "../data/sip_config.yaml") {
+Ptr<shapeInfo_producer> shapeInfo_producer::load_config(const Mat &input_src,
+                                                        Mat input_mask,
+                                                        bool padding,
+                                                        string path) {
   FileStorage fs(path, FileStorage::READ);
 
   // 用 Ptr 管理并初始化 shapeInfo_producer 对象
@@ -156,8 +153,7 @@ void shapeInfo_producer::produce_infos() {
     }
 }
 
-static Mat shapeInfo_producer::affineTrans(const Mat &src, float angle,
-                                               float scale) {
+Mat shapeInfo_producer::affineTrans(const Mat &src, float angle, float scale) {
   Mat dst;
   Point2f center(cvFloor(src.cols / 2.0f), cvFloor(src.rows / 2.0f));
   Mat rotate_mat = getRotationMatrix2D(center, angle, scale);
@@ -173,12 +169,23 @@ Mat shapeInfo_producer::mask_of(const Info &info) {
   return affineTrans(mask, info.angle, info.scale);
 }
 
-const vector<shapeInfo_producer::Info> &
-shapeInfo_producer::Infos_constptr() const {
+const vector<shapeInfo_producer::Info> &shapeInfo_producer::Infos_constptr()
+    const {
   return Infos;
 }
 
-inline static ushort Template::angle2bit(const float &angle) {
+Template::Template() {
+  template_created = false;
+  num_prograds = 10;
+  lowest_grad_norm = line2d_eps;
+}
+
+Template::Template(size_t num_pgs, float l_gd_norm) : Template() {
+  num_prograds = num_pgs;
+  lowest_grad_norm = l_gd_norm;
+}
+
+ushort Template::angle2bit(const float &angle) {
   float angle_mod = angle > 180 ? angle - 180 : angle;
   ushort quantized = 0;
   for (int i = 0; i < 16; i++) {
@@ -190,18 +197,13 @@ inline static ushort Template::angle2bit(const float &angle) {
   return quantized;
 }
 
-static void Template::getOriMat(const Template &inputTemplate, Mat &edges,
-                                Mat &angles) {
-  CV_Assert(!inputTemplate.src.empty() && !inputTemplate.mask.empty());
-  CV_Assert(inputTemplate.src.channels() == 1 &&
-            inputTemplate.src.channels() == 3);
-  CV_Assert(lowest_grad_norm > line2d_eps && num_prograds);
+void Template::getOriMat(const cv::Mat &src, Mat &edges, Mat &angles) {
+  CV_Assert(!src.empty());
+  CV_Assert(src.channels() == 1 || src.channels() == 3);
 
   /// @variables:
-  vector<Mat> channels;
-  split(inputTemplate.src, channels);  // 拆分成三个通道
-  vector<Mat> imgs;
-  for (auto &cl : channels) imgs.push_back(cl & inputTemplate.mask);
+  vector<Mat> imgs(3);
+  split(src, imgs);  // 拆分成三个通道
   Mat gx = Mat::zeros(src.size(), CV_32F);
   Mat gy = Mat::zeros(src.size(), CV_32F);
   edges = Mat::zeros(src.size(), CV_32F);
@@ -209,10 +211,10 @@ static void Template::getOriMat(const Template &inputTemplate, Mat &edges,
   float max_grad_norm = 0.0f;
 
   // 计算梯度模长和方向角
-  if (imgs.size() == 1) {  // src 为单通道图像
+  if (src.channels() == 1) {  // src 为单通道图像
     GaussianBlur(imgs[0], imgs[0], Size(7, 7), 1.9);
-    Sobel(imgs[0], gx, CV_32F, 1, 0);
-    Sobel(imgs[0], gy, CV_32F, 1, 0);
+    Sobel(imgs[0], gx, CV_32F, 1, 0, 3);
+    Sobel(imgs[0], gy, CV_32F, 0, 1, 3);
     for (int i = 0; i < edges.rows; i++) {
       for (int j = 0; j < edges.cols; j++) {
         edges.at<float>(i, j) = sqrt(gx.at<float>(i, j) * gx.at<float>(i, j) +
@@ -224,18 +226,18 @@ static void Template::getOriMat(const Template &inputTemplate, Mat &edges,
       }
     }
   } else {  // src 为 3 通道图像
-    vector<Mat> cedges(3);
-    vector<Mat> cangles(3);
+    vector<Mat> cedges(3, Mat::zeros(src.size(), CV_32F));
+    vector<Mat> cangles(3, Mat::zeros(src.size(), CV_32F));
     for (int k = 0; k < 3; k++) {
       GaussianBlur(imgs[k], imgs[k], Size(7, 7), 1.9);
-      Sobel(imgs[k], gx, CV_32F, 1, 0);
-      Sobel(imgs[k], gy, CV_32F, 1, 0);
+      Sobel(imgs[k], gx, CV_32F, 1, 0, 3);
+      Sobel(imgs[k], gy, CV_32F, 0, 1, 3);
       for (int i = 0; i < edges.rows; i++) {
         for (int j = 0; j < edges.cols; j++) {
-          cedges[i].at<float>(i, j) =
+          cedges[k].at<float>(i, j) =
               sqrt(gx.at<float>(i, j) * gx.at<float>(i, j) +
                    gy.at<float>(i, j) * gy.at<float>(i, j));
-          cangles[i].at<float>(i, j) =
+          cangles[k].at<float>(i, j) =
               fastAtan2(gy.at<float>(i, j), gx.at<float>(i, j));
         }
       }
@@ -253,7 +255,7 @@ static void Template::getOriMat(const Template &inputTemplate, Mat &edges,
         }
         if (max_grad_norm < maxEdge) max_grad_norm = maxEdge;
         edges.at<float>(i, j) = maxEdge;
-        angles.at<float>(i, j) = canlges[index].at<float>(i, j);
+        angles.at<float>(i, j) = cangles[index].at<float>(i, j);
       }
     }
   }
@@ -266,85 +268,119 @@ static void Template::getOriMat(const Template &inputTemplate, Mat &edges,
   }
 }
 
-static void Template::getFeatures(Template &inputTemplate, Mat &edges,
-                                Mat &angles, int kernel_size) {
-  vector<Features> &pg_list = inputTemplate.pg_ptr();
+void Template::createTemplate(const cv::Mat &src, Template &tp,
+                              int kernel_size) {
+  Mat edges, angles;
+
+  getOriMat(src, edges, angles);
+  // normalize(edges, edges, 0, 255, NORM_MINMAX, CV_8U);
+  // imshow("edges", edges);
+  // waitKey();
+
+  tp.selectFeatures_from(edges, angles, kernel_size);
+
+  tp.scatter(kernel_size / 2 + 1);
+}
+
+Ptr<Template> Template::create_from(const cv::Mat &src, size_t num_pgs,
+                                    float l_gd_norm) {
+  // TODO: insert return statement here
+  Ptr<Template> tp = makePtr<Template>(num_pgs, l_gd_norm);
+
+  for (int i = 0; i < 100; i++) {
+    createTemplate(src, *tp);
+    if (tp->prograds.size() > tp->num_prograds) break;
+  }
+  if (tp->prograds.size() > tp->num_prograds)
+    tp->template_created = true;
+  else {
+    cerr << "无法找到的足够的特征点！" << endl;
+    tp->prograds.clear();
+  }
+
+  return tp;
+}
+
+void Template::selectFeatures_from(const cv::Mat &_edges,
+                                   const cv::Mat &_angles, int kernel_size) {
+  Mat edges = _edges.clone();
   Range rows(kernel_size / 2, kernel_size / 2 + edges.rows);
   Range cols(kernel_size / 2, kernel_size / 2 + edges.cols);
-  copyMakeBorder(edges, kernel_size / 2, kernel_size / 2, kernel_size / 2,
-                     kernel_size / 2, BORDER_CONSTANT);
+  copyMakeBorder(edges, edges, kernel_size / 2, kernel_size / 2, kernel_size / 2,
+                 kernel_size / 2, BORDER_CONSTANT);
 
   for (int i = rows.start; i < rows.end; i++) {
     for (int j = cols.start; j < cols.end; j++) {
-      if (edges.at<float>(i, j) < inputTemplate.lowest_grad_norm) {
+      if (edges.at<float>(i, j) < lowest_grad_norm) {
         edges.at<float>(i, j) = 0.0f;
         continue;
       }
       for (int dy = -kernel_size / 2; dy < kernel_size / 2 + 1; dy++) {
         for (int dx = -kernel_size / 2; dx < kernel_size / 2 + 1; dx++) {
-          if (edges.at<float> == 0.0f) continue;
+          if (edges.at<float>(i, j) < lowest_grad_norm) continue;
           if (edges.at<float>(i, j) < edges.at<float>(i + dy, j + dx)) {
-            edge.at<float>(i, j) = 0.0f;
+            edges.at<float>(i, j) = 0.0f;
             break;
           }
         }
       }
-      if (edge.at<float>(i, j) > inputTemplate.lowest_grad_norm) {
-        pg_list.push_back(Features(Point(j, i),
-                                   angle2bit(angle.at<float>(i, j)),
-                                   edges.at<float>(i, j)));
+      if (edges.at<float>(i, j) > lowest_grad_norm) {
+        prograds.push_back(Features(
+            Point(j, i),
+            angle2bit(_angles.at<float>(i - rows.start, j - cols.start)),
+            edges.at<float>(i, j)));
       }
     }
-
-    edges = edges(rows, cols);
-
-    stable_sort(pg_list.begin(), pg_list.end());
   }
+
+  stable_sort(prograds.begin(), prograds.end());
 }
 
-static void Template::scatterFeatures(const Template &inputTemplate, float lowest_distance) { 
-  vector<Features> &pg_list = inputTemplate.pg_ptr();
-  vector<Features> new_pg_list;
+void Template::scatter(float lowest_distance) {
+  CV_Assert(lowest_distance > 2.0f);
+  CV_Assert(!prograds.empty());
+
+  int turns = 0;
   float low_distsq = lowest_distance * lowest_distance;
   float dist = 0.0f;
-  new_pg_list.push_back(pg_list[0]);
-  int turns = 0;
+  vector<Features> new_pg_list;
+  new_pg_list.push_back(prograds[0]);
 
-  while(1) {
+  while (1) {
     turns++;
-    for(int i = 1; i < pg_list.size(); i++) {
-      for(int j = 0; j < new_pg_list.size(); j++) {
-        dist = pow(pg_list[i].p_xy.x - new_pg_list[j].p_xy.x, 2) + pow(pg_list[i].p_xy.y - new_pg_list[j].p_xy.y, 2);
+    for (size_t i = 1; i < prograds.size(); i++) {
+      for (size_t j = 0; j < new_pg_list.size(); j++) {
+        dist = pow(prograds[i].p_xy.x - new_pg_list[j].p_xy.x, 2) +
+               pow(prograds[i].p_xy.y - new_pg_list[j].p_xy.y, 2);
         if (dist > low_distsq) {
-          new_pg_list.push_back(pg_list[i]);
+          new_pg_list.push_back(prograds[i]);
           break;
         }
       }
     }
-    if (turns == 1 && new_pg_list.size() > inputTemplate.num_prograds) {
+    if (turns == 1 && new_pg_list.size() >= num_prograds) {
       turns = 0;
-      lowest_distance += 1.0f
+      lowest_distance += 1.0f;
       low_distsq = lowest_distance * lowest_distance;
       new_pg_list.clear();
-      new_pg_list.push_back(pg_list[0]);
+      new_pg_list.push_back(prograds[0]);
+    } else {  // turns > 1 or new_pg_list.size() < num_prograds
+      lowest_distance -= 1.0f;
+      low_distsq = lowest_distance * lowest_distance;
+      // 已经选取了足够多的特征点( and turns > 1 )
+      if (new_pg_list.size() >= num_prograds) {
+        break;
+      } else if (turns > 1 &&
+                 lowest_distance <= 2.0f) {  // and new_pg_list.size() <
+                                             // num_prograds
+        cerr << "在最小间距下，仍然无法取到足够多的特征点！" << endl;
+        break;
+      }
+      // turns > 1 and new_pg_list.size() < num_prograds and
+      // lowest_disttance > 2.0f turns = 1 and new_pg_list.size() <
+      // num_prograds
     }
-    else
   }
+
+  prograds = new_pg_list;
 }
-
-static void Template::exactFeatures(const Template &inputTemplate) {
-  vector<Features> &pg_list = inputTemplate.pg_ptr();
-  pg_list.clear();
-
-  Mat edges, angles;
-  getOriMat(inputTemplate, edges, angles);
-
-  getFeatures(inputTemplate, edges, angles, 5);
-
-  float l_dis = (float)pg_list.size() / (inputTemplate.num_prograds+1);
-  scatterFeatures(inputTemplate, l_dis);
-
-  cropTemplate();
-}
-
-vector<Template::Features> &Template::pg_ptr() { return prograds; }
