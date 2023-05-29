@@ -2,8 +2,11 @@
 #define OPENCV_LINE_2D_HPP
 
 #include <array>
+#include <bitset>
 #include <iostream>
+#include <map>
 #include <opencv2/opencv.hpp>
+#include <random>
 #include <vector>
 
 #define line2d_eps 1e-7f
@@ -108,18 +111,21 @@ class shapeInfo_producer {
   std::vector<shapeInfo_producer::Info> &Infos_ptr() { return Infos; }
 };
 
-/// @todo 完成模板 template 类
+inline ushort angle2bit(const float &angle);
+inline float bit2angle(const ushort &bit);
+
 class Template {
  public:
   struct Features {
-    cv::Point p_xy;   // 特征点坐标
-    float angle;      // 特征方向角度 0~360
-    float grad_norm;  // 梯度模长(已归一化)
+    cv::Point p_xy;    // 特征点坐标
+    float angle;       // 特征方向角度 0~360
+    float grad_norm;   // 梯度模长(已归一化)
+    ushort angle_bit;  // 二进制的特征方向角
     Features(cv::Point xy, float angle, float grad)
         : p_xy(xy), angle(angle), grad_norm(grad) {}
-    bool operator<(const Features &rhs) const {  // 按梯度模长进行排序
-      return grad_norm < rhs.grad_norm;
-    }
+    // bool operator<(const Features &rhs) const {  // 按梯度模长进行排序
+    //   return grad_norm < rhs.grad_norm;
+    // }
   };
 
   struct TemplateParams {
@@ -132,7 +138,7 @@ class Template {
       num_features = 200;
       grad_norm = 0.2f;
       template_crated = false;
-      nms_kernel_size = 5;
+      nms_kernel_size = 7;
       scatter_distance = 10.0f;
     }
   };
@@ -141,41 +147,75 @@ class Template {
 
   Template(TemplateParams params);
 
-  static ushort angle2bit(const float &angle);
-
   static void getOriMat(const cv::Mat &src, cv::Mat &edges, cv::Mat &angles);
 
   static void createTemplate(const cv::Mat &src, Template &tp,
-                             int kernel_size = 3, float lowest_distace = 6.0f);
+                             int kernel_size = 3,
+                             float scatter_distance = 6.0f);
 
-  static cv::Ptr<Template> makePtr_from(
+  static cv::Ptr<Template> createPtr_from(
       const cv::Mat &src, TemplateParams params = TemplateParams());
 
   void selectFeatures_from(const cv::Mat &_edges, const cv::Mat &_angles,
-                           int kernel_size = 0);
+                           int nms_kernel_size = 3);
 
-  void scatter(float lowest_distance = 0.0f);
+  void scatter(float upper_distance = 6.0f);
+
+  std::vector<Features> relocate_by(shapeInfo_producer::Info info);
+
+  bool iscreated() { return template_created; }
 
   const std::vector<Features> &pg_ptr() const { return prograds; };
 
  private:
-  int nms_kernel_size;     // 非极大值抑制的窗口大小
-  float scatter_distance;  // 离散化特征点之间的最小距离
-  float grad_norm;         // 最小梯度阈值 取值范围 [0, 1.0)
-  size_t num_features;     // 特征方向个数
-  bool template_created;  // 记录模板创建状态 true: 模板已创建完成 false:
-                          // 模板未创建
+  int nms_kernel_size;             // 非极大值抑制的窗口大小
+  float scatter_distance;          // 离散化特征点之间的最小距离
+  float grad_norm;                 // 最小梯度阈值 取值范围 [0, 1.0)
+  size_t num_features;             // 特征方向个数
+  bool template_created;           // 记录模板创建状态
   std::vector<Features> prograds;  // 特征方向序列
 };
 
 /// @todo 完成检测算子类
 class Detector {
  public:
-  Detector() {}
-  void addTemplate(const cv::Mat &src, const cv::Mat &mask,
-                   int num_features = 0) {}
+  struct MatchPoint {
+    cv::Point p_xy;
+    float similarity;
+    MatchPoint(cv::Point p, float similar_score): p_xy(p), similarity(similar_score) { }
+    bool operator < (const MatchPoint &rhs) const {
+      return similarity > rhs.similarity;
+    }
+  };
+  
+
+  int pyramid_level;
+  ImagePyramid src_pyramid;
+  ImagePyramid temp_pyramid;
+  std::vector<cv::Ptr<Template>> temps;
+  std::vector<float> cos_table;
+
+  Detector();
+
+  static void quantize(const cv::Mat &edges, const cv::Mat &angles, cv::Mat &dst, int kernel_size = 3, float grad_norm = line2d_eps);
+  
+  static void spread(cv::Mat &ori_bit, cv::Mat &spread_ori, int kernel_size = 3);
+
+  void setSourceImage(const cv::Mat &src, int pyramid_level = 2,
+                      cv::Mat mask = cv::Mat());
+
+  void setTempate(const cv::Mat &temp_src, int pyramid_level = 2,
+                  Template::TemplateParams params = Template::TemplateParams(),
+                  cv::Mat mask = cv::Mat());
+
+  void match(const cv::Mat &sourceImage, const cv::Mat &templateImage,
+             float lower_score = 90,
+             Template::TemplateParams params = Template::TemplateParams(),
+             cv::Mat mask_src = cv::Mat(), cv::Mat mask_temp = cv::Mat());
 
  private:
+
+  void init_costable();
 };
 
 #endif  // OPENCV_LINE_2D_HPP

@@ -4,25 +4,33 @@ using namespace std;
 
 int main() {
   Mat image = imread("../imagelib/Template.jpg", IMREAD_COLOR);
-  Ptr<shapeInfo_producer> sip = makePtr<shapeInfo_producer>(image);
+  Ptr<shapeInfo_producer> sip = shapeInfo_producer::load_config(image);
+  // Ptr<shapeInfo_producer> sip = makePtr<shapeInfo_producer>(image);
   sip->produce_infos();
-  for(const auto &info : sip->Infos_constptr()) {
+
+  Template::TemplateParams params;
+  params.num_features = 20;
+  Ptr<Template> tp = makePtr<Template>(params);
+
+  for (const auto &info : sip->Infos_constptr()) {
     cout << "angle: " << info.angle << endl;
     cout << "scale: " << info.scale << endl;
+
     Mat templateImage;
     sip->src_of(info).copyTo(templateImage, sip->mask_of(info));
-    Template::TemplateParams params;
-    params.num_features = 100;
-    Ptr<Template> tp = Template::makePtr_from(templateImage, params);
-    for (const auto &pg : tp->pg_ptr()) {
-      circle(templateImage, pg.p_xy, 1, Scalar(0, 0, 255), -1);
+
+    if (!tp->iscreated())
+      tp = Template::createPtr_from(image, params);
+    vector<Template::Features> featurePoints = tp->relocate_by(info);
+
+    Point center(templateImage.cols / 2, templateImage.rows / 2);
+    for (const auto &p : featurePoints) {
+      circle(templateImage, center + p.p_xy, 1, Scalar(0, 0, 255), -1);
     }
 
     namedWindow("templateImage", WINDOW_NORMAL);
     imshow("templateImage", templateImage);
     waitKey();
-    break;
   }
-  waitKey();
   return 0;
 }
