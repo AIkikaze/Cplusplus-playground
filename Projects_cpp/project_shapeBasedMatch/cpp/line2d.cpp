@@ -175,14 +175,20 @@ const vector<shapeInfo_producer::Info> &shapeInfo_producer::Infos_constptr()
 }
 
 Template::Template() {
-  template_created = false;
-  num_prograds = 10;
-  lowest_grad_norm = line2d_eps;
+  TemplateParams defaultParams;
+  nms_kernel_size = defaultParams.nms_kernel_size;
+  scatter_distance = defaultParams.scatter_distance;
+  grad_norm = defaultParams.grad_norm;
+  num_features = defaultParams.num_features;
+  template_created = defaultParams.template_crated;
 }
 
-Template::Template(size_t num_pgs, float l_gd_norm) : Template() {
-  num_prograds = num_pgs;
-  lowest_grad_norm = l_gd_norm;
+Template::Template(TemplateParams params) {
+  nms_kernel_size = params.nms_kernel_size;
+  scatter_distance = params.scatter_distance;
+  grad_norm = params.grad_norm;
+  num_features = params.num_features;
+  template_created = params.template_crated;
 }
 
 ushort Template::angle2bit(const float &angle) {
@@ -212,7 +218,7 @@ void Template::getOriMat(const cv::Mat &src, Mat &edges, Mat &angles) {
 
   // 计算梯度模长和方向角
   if (src.channels() == 1) {  // src 为单通道图像
-    GaussianBlur(imgs[0], imgs[0], Size(7, 7), 1.9);
+    GaussianBlur(imgs[0], imgs[0], Size(5, 5), 1.5);
     Sobel(imgs[0], gx, CV_32F, 1, 0, 3);
     Sobel(imgs[0], gy, CV_32F, 0, 1, 3);
     for (int i = 0; i < edges.rows; i++) {
@@ -229,9 +235,9 @@ void Template::getOriMat(const cv::Mat &src, Mat &edges, Mat &angles) {
     vector<Mat> cedges(3, Mat::zeros(src.size(), CV_32F));
     vector<Mat> cangles(3, Mat::zeros(src.size(), CV_32F));
     for (int k = 0; k < 3; k++) {
-      GaussianBlur(imgs[k], imgs[k], Size(7, 7), 1.9);
-      Sobel(imgs[k], gx, CV_32F, 1, 0, 3);
-      Sobel(imgs[k], gy, CV_32F, 0, 1, 3);
+      // GaussianBlur(imgs[k], imgs[k], Size(5, 5), 1.5);
+      Scharr(imgs[k], gx, CV_32F, 1, 0);
+      Scharr(imgs[k], gy, CV_32F, 0, 1);
       for (int i = 0; i < edges.rows; i++) {
         for (int j = 0; j < edges.cols; j++) {
           cedges[k].at<float>(i, j) =
@@ -269,29 +275,29 @@ void Template::getOriMat(const cv::Mat &src, Mat &edges, Mat &angles) {
 }
 
 void Template::createTemplate(const cv::Mat &src, Template &tp,
-                              int kernel_size) {
+                              int kernel_size, float lowest_distance) {
   Mat edges, angles;
 
   getOriMat(src, edges, angles);
-  // normalize(edges, edges, 0, 255, NORM_MINMAX, CV_8U);
-  // imshow("edges", edges);
+  // Mat edgesImage;
+  // normalize(edges, edgesImage, 0, 255, NORM_MINMAX, CV_8U);
+  // imshow("edges", edgesImage);
   // waitKey();
 
   tp.selectFeatures_from(edges, angles, kernel_size);
 
-  tp.scatter(kernel_size / 2 + 1);
+  tp.scatter(lowest_distance);
 }
 
-Ptr<Template> Template::create_from(const cv::Mat &src, size_t num_pgs,
-                                    float l_gd_norm) {
-  // TODO: insert return statement here
-  Ptr<Template> tp = makePtr<Template>(num_pgs, l_gd_norm);
+cv::Ptr<Template> Template::makePtr_from(const cv::Mat &src,
+                                         TemplateParams params) {
+  Ptr<Template> tp = makePtr<Template>(params);
 
   for (int i = 0; i < 100; i++) {
-    createTemplate(src, *tp);
-    if (tp->prograds.size() > tp->num_prograds) break;
+    createTemplate(src, *tp, params.nms_kernel_size, params.scatter_distance);
+    if (tp->prograds.size() >= tp->num_features) break;
   }
-  if (tp->prograds.size() > tp->num_prograds)
+  if (tp->prograds.size() >= tp->num_features)
     tp->template_created = true;
   else {
     cerr << "无法找到的足够的特征点！" << endl;
@@ -304,42 +310,105 @@ Ptr<Template> Template::create_from(const cv::Mat &src, size_t num_pgs,
 void Template::selectFeatures_from(const cv::Mat &_edges,
                                    const cv::Mat &_angles, int kernel_size) {
   Mat edges = _edges.clone();
+  Mat angles = Mat::zeros(_angles.size(), CV_8U);
+
+  // 按方向角度进行非极大值抑制
+  for (int i = 0; i < angles.rows; i++) {
+    for (int j = 0; j < angles.cols; j++) {
+      // 取方向角 0 ~ 360
+      double angle = _angles.at<float>(i, j);
+
+      // 方向角度量化
+      if ((angle > 0 && angle < 22.5) || (angle > 157.5 && angle < 202.5) ||
+          (angle > 337.5 && angle < 360))
+        angles.at<uchar>(i, j) = 0;
+      else if ((angle > 22.5 && angle < 67.5) ||
+               (angle > 202.5 && angle < 247.5))
+        angles.at<uchar>(i, j) = 45;
+      else if ((angle > 67.5 && angle < 112.5) ||
+               (angle > 247.5 && angle < 292.5))
+        angles.at<uchar>(i, j) = 90;
+      else if ((angle > 112.5 && angle < 157.5) ||
+               (angle > 292.5 && angle < 337.5))
+        angles.at<uchar>(i, j) = 135;
+      else
+        angles.at<uchar>(i, j) = 0;
+    }
+  }
+
+  // 非极大值抑制
   Range rows(kernel_size / 2, kernel_size / 2 + edges.rows);
   Range cols(kernel_size / 2, kernel_size / 2 + edges.cols);
-  copyMakeBorder(edges, edges, kernel_size / 2, kernel_size / 2, kernel_size / 2,
-                 kernel_size / 2, BORDER_CONSTANT);
-
+  copyMakeBorder(edges, edges, kernel_size / 2, kernel_size / 2,
+                 kernel_size / 2, kernel_size / 2, BORDER_CONSTANT, Scalar(0));
   for (int i = rows.start; i < rows.end; i++) {
     for (int j = cols.start; j < cols.end; j++) {
-      if (edges.at<float>(i, j) < lowest_grad_norm) {
-        edges.at<float>(i, j) = 0.0f;
-        continue;
+      float prevPixel, nextPixel;
+      switch ((int)angles.at<uchar>(i - rows.start, j - cols.start)) {
+        case 0:
+          prevPixel = edges.at<float>(i, j - 1);
+          nextPixel = edges.at<float>(i, j + 1);
+          break;
+        case 45:
+          prevPixel = edges.at<float>(i - 1, j - 1);
+          nextPixel = edges.at<float>(i + 1, j + 1);
+          break;
+        case 90:
+          prevPixel = edges.at<float>(i - 1, j);
+          nextPixel = edges.at<float>(i + 1, j);
+          break;
+        case 135:
+          prevPixel = edges.at<float>(i + 1, j - 1);
+          nextPixel = edges.at<float>(i - 1, j + 1);
+          break;
       }
+
+      // 当前点的梯度与梯度方向上临近点的梯度大小
+      if (edges.at<float>(i, j) < prevPixel ||
+          edges.at<float>(i, j) < nextPixel)
+        edges.at<float>(i, j) = 0.0f;
+    }
+  }
+  // Mat edgesImage;
+  // normalize(edges, edgesImage, 0, 255, NORM_MINMAX, CV_8U);
+  // namedWindow("edges after nms");
+  // imshow("edges after nms", edges);
+  // waitKey();
+  // namedWindow("angles after quantized");
+  // imshow("angles after quantized", angles);
+  // waitKey();
+
+  // 取核方阵中的梯度值最大的点为特征点
+  for (int i = rows.start; i < rows.end; i++) {
+    for (int j = cols.start; j < cols.end; j++) {
+      if (edges.at<float>(i, j) < grad_norm) continue;
       for (int dy = -kernel_size / 2; dy < kernel_size / 2 + 1; dy++) {
+        if (edges.at<float>(i, j) < grad_norm) break;
         for (int dx = -kernel_size / 2; dx < kernel_size / 2 + 1; dx++) {
-          if (edges.at<float>(i, j) < lowest_grad_norm) continue;
           if (edges.at<float>(i, j) < edges.at<float>(i + dy, j + dx)) {
             edges.at<float>(i, j) = 0.0f;
             break;
           }
         }
       }
-      if (edges.at<float>(i, j) > lowest_grad_norm) {
+      if (edges.at<float>(i, j) > grad_norm) {
         prograds.push_back(Features(
-            Point(j, i),
-            angle2bit(_angles.at<float>(i - rows.start, j - cols.start)),
-            edges.at<float>(i, j)));
+            Point(j - cols.start, i - rows.start),
+            _angles.at<float>(i - rows.start, j - cols.start),
+            _edges.at<float>(i, j)));
       }
     }
   }
 
-  stable_sort(prograds.begin(), prograds.end());
 }
 
 void Template::scatter(float lowest_distance) {
   CV_Assert(lowest_distance > 2.0f);
   CV_Assert(!prograds.empty());
 
+  stable_sort(prograds.begin(), prograds.end());
+
+  lowest_distance = fmax(nms_kernel_size * prograds.size() / num_features, lowest_distance);
   int turns = 0;
   float low_distsq = lowest_distance * lowest_distance;
   float dist = 0.0f;
@@ -349,6 +418,7 @@ void Template::scatter(float lowest_distance) {
   while (1) {
     turns++;
     for (size_t i = 1; i < prograds.size(); i++) {
+      if (new_pg_list.size() >= num_features) break;
       for (size_t j = 0; j < new_pg_list.size(); j++) {
         dist = pow(prograds[i].p_xy.x - new_pg_list[j].p_xy.x, 2) +
                pow(prograds[i].p_xy.y - new_pg_list[j].p_xy.y, 2);
@@ -358,27 +428,27 @@ void Template::scatter(float lowest_distance) {
         }
       }
     }
-    if (turns == 1 && new_pg_list.size() >= num_prograds) {
+    if (turns == 1 && new_pg_list.size() >= num_features) {
       turns = 0;
       lowest_distance += 1.0f;
       low_distsq = lowest_distance * lowest_distance;
       new_pg_list.clear();
       new_pg_list.push_back(prograds[0]);
-    } else {  // turns > 1 or new_pg_list.size() < num_prograds
+    } else {  // turns > 1 or new_pg_list.size() < num_features
       lowest_distance -= 1.0f;
       low_distsq = lowest_distance * lowest_distance;
       // 已经选取了足够多的特征点( and turns > 1 )
-      if (new_pg_list.size() >= num_prograds) {
+      if (new_pg_list.size() >= num_features) {
         break;
       } else if (turns > 1 &&
                  lowest_distance <= 2.0f) {  // and new_pg_list.size() <
-                                             // num_prograds
+                                             // num_features
         cerr << "在最小间距下，仍然无法取到足够多的特征点！" << endl;
         break;
       }
-      // turns > 1 and new_pg_list.size() < num_prograds and
+      // turns > 1 and new_pg_list.size() < num_features and
       // lowest_disttance > 2.0f turns = 1 and new_pg_list.size() <
-      // num_prograds
+      // num_features
     }
   }
 

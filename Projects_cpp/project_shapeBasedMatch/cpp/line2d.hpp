@@ -109,42 +109,63 @@ class shapeInfo_producer {
 };
 
 /// @todo 完成模板 template 类
-struct Features {
-  cv::Point p_xy;    // 特征点坐标
-  ushort angle_bit;  // 特征方向的 16 位二进制表示
-  float grad_norm;   // 梯度模长(已归一化)
-  Features(cv::Point xy, ushort angle, float grad)
-      : p_xy(xy), angle_bit(angle), grad_norm(grad) {}
-  bool operator<(const Features &rhs) const {  // 按梯度模长进行排序
-    return grad_norm < rhs.grad_norm;
-  }
-};
-
 class Template {
  public:
-  size_t num_prograds;             // 特征方向个数
-  float lowest_grad_norm;          // 最小梯度阈值 取值范围 [0, 1.0)
-  std::vector<Features> prograds;  // 特征方向序列
-  bool template_created;
+  struct Features {
+    cv::Point p_xy;   // 特征点坐标
+    float angle;      // 特征方向角度 0~360
+    float grad_norm;  // 梯度模长(已归一化)
+    Features(cv::Point xy, float angle, float grad)
+        : p_xy(xy), angle(angle), grad_norm(grad) {}
+    bool operator<(const Features &rhs) const {  // 按梯度模长进行排序
+      return grad_norm < rhs.grad_norm;
+    }
+  };
+
+  struct TemplateParams {
+    int num_features;
+    float grad_norm;
+    bool template_crated;
+    int nms_kernel_size;
+    float scatter_distance;
+    TemplateParams() {
+      num_features = 200;
+      grad_norm = 0.2f;
+      template_crated = false;
+      nms_kernel_size = 5;
+      scatter_distance = 10.0f;
+    }
+  };
 
   Template();
 
-  Template(size_t num_pgs, float l_gd_norm);
+  Template(TemplateParams params);
 
   static ushort angle2bit(const float &angle);
 
   static void getOriMat(const cv::Mat &src, cv::Mat &edges, cv::Mat &angles);
 
   static void createTemplate(const cv::Mat &src, Template &tp,
-                             int kernel_size = 5);
+                             int kernel_size = 3, float lowest_distace = 6.0f);
 
-  static cv::Ptr<Template> create_from(const cv::Mat &src, size_t num_pgs = 10,
-                                       float l_gd_norm = line2d_eps);
+  static cv::Ptr<Template> makePtr_from(
+      const cv::Mat &src, TemplateParams params = TemplateParams());
 
   void selectFeatures_from(const cv::Mat &_edges, const cv::Mat &_angles,
-                           int kernel_size);
+                           int kernel_size = 0);
 
-  void scatter(float lowest_distance);
+  void scatter(float lowest_distance = 0.0f);
+
+  const std::vector<Features> &pg_ptr() const { return prograds; };
+
+ private:
+  int nms_kernel_size;     // 非极大值抑制的窗口大小
+  float scatter_distance;  // 离散化特征点之间的最小距离
+  float grad_norm;         // 最小梯度阈值 取值范围 [0, 1.0)
+  size_t num_features;     // 特征方向个数
+  bool template_created;  // 记录模板创建状态 true: 模板已创建完成 false:
+                          // 模板未创建
+  std::vector<Features> prograds;  // 特征方向序列
 };
 
 /// @todo 完成检测算子类
