@@ -12,7 +12,7 @@ ImagePyramid::ImagePyramid(const Mat &src, int level_size) {
   buildPyramid(src, levels);
 }
 
-const Mat &ImagePyramid::operator[](int index) const {
+Mat &ImagePyramid::operator[](int index) {
   CV_Assert(index >= 0 && index < levels);
   return pyramid[index];
 }
@@ -21,10 +21,12 @@ void ImagePyramid::buildPyramid(const Mat &src, int levels) {
   Mat curImg = src.clone();
 
   // 裁剪图像到合适尺寸
-  int suit_size = 1 << levels;
-  int n_rows = (curImg.rows / suit_size) * suit_size;
-  int n_cols = (curImg.cols / suit_size) * suit_size;
-  curImg = curImg(Rect(0, 0, n_cols, n_rows));
+  int suit_size =
+      (1 << levels) * 4;  // 4: 使得最高层图像长宽为 4 的倍数便于线性化
+  int n_rows = (curImg.rows / suit_size + 1) * suit_size;
+  int n_cols = (curImg.cols / suit_size + 1) * suit_size;
+  copyMakeBorder(curImg, curImg, 0, n_rows - curImg.rows, 0,
+                 n_cols - curImg.cols, BORDER_REPLICATE);
 
   // 初始化图像金字塔
   pyramid.push_back(curImg);
@@ -174,26 +176,20 @@ const vector<shapeInfo_producer::Info> &shapeInfo_producer::Infos_constptr()
   return Infos;
 }
 
-ushort angle2bit(const float &angle) {
+int angle2ori(const float &angle) {
   float angle_mod = angle > 180 ? angle - 180 : angle;
-  ushort quantized = 0;
+  int orientation = 0;
   for (int i = 0; i < 16; i++) {
     if (angle_mod <= (float)((i + 1) * 180.0f / 16.0f)) {
-      quantized = (1 << i);
+      orientation = i;
       break;
     }
   }
-  return quantized;
+  return orientation;
 }
 
-float bit2angle(const ushort &bit) {
-  float angle = 180.0f / 32.0f;
-  for (int i = 0; i < 16; i++) {
-    if (bit & (1 << i)) {
-      return angle + (180.0f / 16.0f) * i;
-    }
-  }
-  return 0.0f;  // angle_bit == 0
+float ori2angle(const int &orientation) {
+  return 180.0f / 32.0f + (180.0f / 16.0f) * orientation;
 }
 
 Template::Template() {
@@ -400,29 +396,29 @@ void Template::selectFeatures_from(const cv::Mat &_edges,
   // waitKey();
 
   // 计算领域中出现次数最多的量化特征方向
-  Mat ori_bit = Mat::zeros(_angles.size(), CV_16U);
+  Mat orientation_map = Mat::zeros(_angles.size(), CV_8U);
   for (int i = rows.start; i < rows.end; i++) {
     for (int j = cols.start; j < cols.end; j++) {
       if (_edges.at<float>(i, j) <= grad_norm) continue;
       int max_count = 0;
-      ushort idx_ori = 0;
-      map<ushort, int> ori_count;
+      int orientaion = 0;
+      int ori_count[16] = {0};
       for (int dy = -nms_kernel_size / 2; dy < nms_kernel_size / 2 + 1; dy++) {
         for (int dx = -nms_kernel_size / 2; dx < nms_kernel_size / 2 + 1;
              dx++) {
           if (_edges.at<float>(i + dy, j + dx) > grad_norm) {
-            ushort _ori = angle2bit(
+            int _ori = angle2ori(
                 _angles.at<float>(i - rows.start + dy, j - cols.start + dx));
             ori_count[_ori]++;
             if (ori_count[_ori] > max_count) {
               max_count = ori_count[_ori];
-              idx_ori = _ori;
+              orientaion = _ori;
             }
           }
         }
       }
-      if (ori_count[idx_ori] > (nms_kernel_size * nms_kernel_size) / 2 + 1) {
-        ori_bit.at<ushort>(i - rows.start, j - cols.start) = idx_ori;
+      if (ori_count[orientaion] > (nms_kernel_size * nms_kernel_size) / 2 + 1) {
+        orientation_map.at<uchar>(i - rows.start, j - cols.start) = orientaion;
       }
     }
   }
@@ -447,8 +443,8 @@ void Template::selectFeatures_from(const cv::Mat &_edges,
             Features(Point(j - center.x, i - center.y),
                      _angles.at<float>(i - rows.start, j - cols.start),
                      _edges.at<float>(i, j)));
-        prograds.back().angle_bit =
-            ori_bit.at<ushort>(i - rows.start, j - cols.start);
+        prograds.back().orientation =
+            (int)orientation_map.at<uchar>(i - rows.start, j - cols.start);
       }
     }
   }
@@ -521,7 +517,7 @@ vector<Template::Features> Template::relocate_by(
         info.scale * (sinf(theta) * pg.p_xy.x + cosf(theta) * pg.p_xy.y);
     new_prograds.push_back(
         Features(newPoint, fmod(pg.angle - info.angle, 360.0f), pg.grad_norm));
-    new_prograds.back().angle_bit = angle2bit(new_prograds.back().angle);
+    new_prograds.back().orientation = angle2ori(new_prograds.back().angle);
   }
   return new_prograds;
 }
@@ -533,22 +529,22 @@ void Detector::quantize(const cv::Mat &edges, const cv::Mat &angles,
     for (int j = 0; j < edges.cols; j++) {
       if (edges.at<float>(i, j) <= grad_norm) continue;
       int max_count = 0;
-      ushort idx_ori = 0;
-      map<ushort, int> ori_count;
+      int orientation = 0;
+      int ori_count[16] = {0};
       for (int dy = -kernel_size / 2; dy < kernel_size / 2 + 1; dy++) {
         for (int dx = -kernel_size / 2; dx < kernel_size / 2 + 1; dx++) {
           if (edges.at<float>(i + dy, j + dx) > grad_norm) {
-            ushort _ori = Template::angle2bit(angles.at<float>(i + dy, j + dx));
+            ushort _ori = Template::angle2ori(angles.at<float>(i + dy, j + dx));
             ori_count[_ori]++;
             if (ori_count[_ori] > max_count) {
               max_count = ori_count[_ori];
-              idx_ori = _ori;
+              orientation = _ori;
             }
           }
         }
       }
-      if (ori_count[idx_ori] > (kernel_size * kernel_size) / 2 + 1) {
-        ori_bit.at<ushort>(i, j) = idx_ori;
+      if (ori_count[orientation] > (kernel_size * kernel_size) / 2 + 1) {
+        ori_bit.at<ushort>(i, j) = 1 << orientation;
       }
     }
   }
@@ -565,6 +561,116 @@ void Detector::spread(cv::Mat &ori_bit, cv::Mat &spread_ori, int kernel_size) {
       }
     }
   }
+}
+
+void Detector::computeResponseMaps(cv::Mat &spread_ori,
+                                   std::vector<cv::Mat> &response_maps) {
+  response_maps.resize(16);
+  int maxValue = numeric_limits<ushort>::max();
+  for (int orientation = 0; orientation < 16; orientation++) {
+    for (int i = 0; i < spread_ori.rows; i++) {
+      for (int j = 0; j < spread_ori.cols; j++) {
+        response_maps[orientation].at<float>(i, j) =
+            cos_table[orientation * maxValue + spread_ori.at<ushort>(i, j)];
+      }
+    }
+  }
+}
+
+void Detector::computeSimilarityMap(LinearMemories &memories, Template &temp,
+                                    vector<vector<float>> &similarity_map) {
+  int n_rows = memories.rows * 4;
+  int n_cols = memories.cols * 4;
+  // similarity_map[i][j]
+  // i -> order in kernel ; j -> index in linear vector
+  similarity_map =
+      vector<vector<float>>(16, vector<float>(memories.linear_size()));
+
+  for (int i = 0; i < 16; i++) {
+    Point start = Point(i%4, i/4);
+    for (const auto &pg : temp.pg_ptr()) {
+      Point cur = pg.p_xy + start;
+      if (cur.x < 0 || cur.x >= n_rows ||
+          cur.y < 0 || cur.y >= n_cols)
+        continue;
+      // 计算坐标在线性存储器中的当前位置
+      int position_cur = cur.y / 4 * memories.cols + cur.x / 4;
+      // 计算坐标能够移动到的最大位置
+      int position_end = (n_rows - 1 - cur.y) / 4 * memories.cols + (n_cols - 1 - cur.x) / 4;
+      // 计算坐标在 TxT 分块中的顺序索引
+      int order_kernel = (cur.y % 4) * 4 + cur.x % 4;
+      // 计算相似度矩阵
+      for (int j = position_cur; j <= position_end; j++) {
+        similarity_map[i][j] += memories.at(pg.orientation, order_kernel, j);
+      }
+    }
+  }
+
+  // 转化为 100 分制
+  for (int i = 0; i < 16; i++) {
+    for (int j = 0; j < memories.linear_size(); j++) {
+      similarity_map[i][j] /= (float)temp.pg_ptr().size();
+    }
+  }
+}
+
+void Detector::localSimilarityMap(LinearMemories &memories, Template &temp,
+                                  cv::Mat &similarity_map, cv::Rect roi) {
+  int n_rows = memories.rows * 4;
+  int n_cols = memories.cols * 4;
+  if (!roi.width || !roi.height) 
+    roi = Rect(0, 0, n_cols-1, n_rows-1);
+
+  similarity_map = Mat::zeros(roi.height + 1, roi.width + 1, CV_32F);
+
+  for (int i = roi.y; i <= roi.y + roi.height; i++) {
+    for (int j = roi.x; j <= roi.x + roi.width; j++) {
+      for (const auto &pg : temp.pg_ptr()) {
+        Point cur = pg.p_xy + Point(j, i);
+        if (cur.y < roi.y || cur.x < roi.x || cur.y > roi.y + roi.height || cur.x > roi.x + roi.width) continue;
+        // 计算坐标在线性存储器中的当前位置
+        int position_cur = cur.y / 4 * memories.cols + cur.x / 4;
+        // 计算坐标在 TxT 分块中的顺序索引
+        int order_kernel = (cur.y % 4) * 4 + cur.x % 4;
+        // 计算相似度矩阵
+        similarity_map.at<float>(i - roi.y, j - roi.x) += memories.at(pg.orientation, order_kernel, position_cur);
+      }
+    }
+  }
+
+  // 转化为 100 分制
+  for (int i = 0; i < n_rows; i++) {
+    for (int j = 0; j < n_cols; j++) {
+      similarity_map.at<float>(i, j) /= (float)temp.pg_ptr().size();
+    }
+  }
+}
+
+void Detector::linearize(std::vector<cv::Mat> &response_maps,
+                         LinearMemories &linearized_memories) {
+  int n_rows = response_maps.rows / 4;
+  int n_cols = response_maps.cols / 4;
+  linearized_memories.resize(16, 16, n_rows * n_cols);
+  linearized_memories.rows = n_rows;
+  linearized_memories.cols = n_cols;
+  for (int orientation = 0; orientation < 16; orientation++) {
+    for (int i = 0; i < n_rows; i++) {
+      for (int j = 0; j < n_cols; j++) {
+        for (int di = 0; di < 3; di++) {
+          for (int dj = 0; dj < 3; dj++) {
+            int order_in_kernel = di * 4 + dj;
+            linearized_memories.at(orientation, order_in_kernel,
+                                   i * n_cols + j) =
+                response_maps[orientation].at<float>(i + di, j + dj);
+          }
+        }
+      }
+    }
+  }
+}
+
+void Detector::produceRoi(std::vector<MatchPoint> &input_points, cv::Mat &roi, int lower_score, int grid_size) {
+  
 }
 
 void Detector::setSourceImage(const cv::Mat &src, int pyramid_level,
@@ -607,19 +713,40 @@ void Detector::match(const cv::Mat &sourceImage, const cv::Mat &templateImage,
   int min_CR = min(sourceImage.rows, sourceImage.cols);
   int try_level = 0;
   while (128 * (1 << try_level) < min_CR) try_level++;
-  setSourceImage(sourceImage, try_level, mask_src);
-  setTempate(templateImage, try_level, params, mask_temp);
+  pyramid_level = try_level;
+  setSourceImage(sourceImage, pyramid_level, mask_src);
+  setTempate(templateImage, pyramid_level, params, mask_temp);
 
   // 计算梯度响应矩阵
-  for (int i = 0; i < try_level; i++) {
+  for (int i = 0; i < pyramid_level; i++) {
     Mat edges, angles;
     Template::getOriMat(src_pyramid[i], edges, angles);
 
     Mat ori_bit;
     quantize(edges, angles, ori_bit, params.nms_kernel_size, params.grad_norm);
 
-    spread(ori_bit, ori_bit, params.nms_kernel_size);
+    Mat spread_ori;
+    spread(ori_bit, spread_ori, params.nms_kernel_size);
+
+    vector<Mat> response_maps(16, Mat::zeros(src_pyramid[i].size(), CV_32F));
+    computeResponseMaps(spread_ori, response_maps);
+
+    linearize(response_maps, memory_pyramid[i]);
   }
+
+  // 从最高层开始相似度匹配
+  Mat score_map;
+  vector<vector<float>> similarity_map;
+  vector<Rect> rois;
+  int match_level = pyramid_level - 1;
+
+  computeSimilarityMap(memory_pyramid[match_level], temp_pyramid[match_level], similarity_map);
+  produceRoi(similarity_map, rois);
+
+  while (--match_level >= 0) {
+    localSimilarityMap(memory_pyramid[match_level], temp_pyramid[match_level], roi);
+  }
+  
 }
 
 void Detector::init_costable() {
@@ -631,8 +758,8 @@ void Detector::init_costable() {
       maxCos = 0.0f;
       for (int k = 0; k < 16; k++) {
         if (bit & (1 << k))
-          maxCos = maxCos < abs(cos(bit2angle(1 << k) - bit2angle(1 << i)))
-                       ? abs(cos(bit2angle(1 << k) - bit2angle(1 << i)))
+          maxCos = maxCos < abs(cos(ori2angle(1 << k) - ori2angle(1 << i)))
+                       ? abs(cos(ori2angle(1 << k) - ori2angle(1 << i)))
                        : maxCos;
       }
       cos_table[i * maxValue + bit] = maxCos;

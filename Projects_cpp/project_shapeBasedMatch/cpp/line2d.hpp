@@ -111,16 +111,16 @@ class shapeInfo_producer {
   std::vector<shapeInfo_producer::Info> &Infos_ptr() { return Infos; }
 };
 
-inline ushort angle2bit(const float &angle);
-inline float bit2angle(const ushort &bit);
+inline int angle2ori(const float &angle);
+inline float ori2angle(const int &orientation);
 
 class Template {
  public:
   struct Features {
-    cv::Point p_xy;    // 特征点坐标
-    float angle;       // 特征方向角度 0~360
-    float grad_norm;   // 梯度模长(已归一化)
-    ushort angle_bit;  // 二进制的特征方向角
+    cv::Point p_xy;   // 特征点坐标
+    float angle;      // 特征方向角度 0~360
+    float grad_norm;  // 梯度模长(已归一化)
+    int orientation;  // 特征方向角量化后的标签 0~15
     Features(cv::Point xy, float angle, float grad)
         : p_xy(xy), angle(angle), grad_norm(grad) {}
     // bool operator<(const Features &rhs) const {  // 按梯度模长进行排序
@@ -182,24 +182,79 @@ class Detector {
   struct MatchPoint {
     cv::Point p_xy;
     float similarity;
-    MatchPoint(cv::Point p, float similar_score): p_xy(p), similarity(similar_score) { }
-    bool operator < (const MatchPoint &rhs) const {
+    MatchPoint(cv::Point p, float similar_score)
+        : p_xy(p), similarity(similar_score) {}
+    bool operator<(const MatchPoint &rhs) const {
       return similarity > rhs.similarity;
     }
   };
-  
+
+  class LinearMemories {
+   private:
+    std::vector<std::vector<std::vector<float>>> memories;  // 线性存储器
+
+   public:
+    int rows;
+    int cols;
+
+    int linear_size() {
+      return memories[0][0].size();
+    }
+
+    void resize(size_t x, size_t y, size_t z) {
+      memories.resize(x);
+      for (size_t i = 0; i < x; i++) {
+        memories[i].resize(y);
+        for (size_t j = 0; j < y; j++) {
+          memories[i][j].resize(z);
+        }
+      }
+    }
+
+    /// @brief memories[i][j][k] -> linearized S_i(c)
+    /// @param i -> orientation
+    /// @param j -> order in TxT kernel
+    /// @param k -> index in linear vector
+    /// @return &memories[i][j][k]
+    float &at(int i, int j, int k) {
+      static float default_value = 0.0f;  // 静态的默认值
+      if (i < 0 || i >= memories.size()) return default_value;
+      if (j < 0 || j >= memories[0].size()) return default_value;
+      if (k < 0 || k >= memories[0][0].size()) return default_value;
+      return memories[i][j][k];
+    }
+  };
 
   int pyramid_level;
   ImagePyramid src_pyramid;
   ImagePyramid temp_pyramid;
+  std::vector<LinearMemories> memory_pyramid;
   std::vector<cv::Ptr<Template>> temps;
+  std::vector<MatchPoint> match_points;
   std::vector<float> cos_table;
 
   Detector();
 
-  static void quantize(const cv::Mat &edges, const cv::Mat &angles, cv::Mat &dst, int kernel_size = 3, float grad_norm = line2d_eps);
+  static void quantize(const cv::Mat &edges, const cv::Mat &angles,
+                       cv::Mat &dst, int kernel_size = 3,
+                       float grad_norm = line2d_eps);
+
+  static void spread(cv::Mat &ori_bit, cv::Mat &spread_ori,
+                     int kernel_size = 3);
+
+  static void computeResponseMaps(cv::Mat &spread_ori,
+                                  std::vector<cv::Mat> &response_maps);
+
+  static void computeSimilarityMap(LinearMemories &memories, Template &temp,
+                                   std::vector<std::vector<float>> &similarity_map);
+
+  static void localSimilarityMap(LinearMemories &memories, Template &temp,
+                                  cv::Mat &similarity_map, cv::Rect roi = cv::Rect());
+
+  static void linearize(std::vector<cv::Mat> &response_maps,
+                        LinearMemories &linearized_memories);
   
-  static void spread(cv::Mat &ori_bit, cv::Mat &spread_ori, int kernel_size = 3);
+  static void produceRoi(std::vector<MatchPoint> &input_points, cv::Mat &roi, int lower_score, int grad_size = 3);
 
   void setSourceImage(const cv::Mat &src, int pyramid_level = 2,
                       cv::Mat mask = cv::Mat());
@@ -214,7 +269,6 @@ class Detector {
              cv::Mat mask_src = cv::Mat(), cv::Mat mask_temp = cv::Mat());
 
  private:
-
   void init_costable();
 };
 
@@ -229,8 +283,8 @@ class Detector {
 //       maxCos = 0.0f;
 //       for (int k = 0; k < 16; k++) {
 //         if ((ushort(i)) & (1 << k))
-//           maxCos = maxCos < abs(cos(bit2angle(1 << k) - bit2angle(1 << j)))
-//                        ? abs(cos(bit2angle(1 << k) - bit2angle(1 << j)))
+//           maxCos = maxCos < abs(cos(ori2angle(1 << k) - ori2angle(1 << j)))
+//                        ? abs(cos(ori2angle(1 << k) - ori2angle(1 << j)))
 //                        : maxCos;
 //       }
 //       cos_table[i * 16 + j] = maxCos;
@@ -238,12 +292,12 @@ class Detector {
 //   }
 // }
 
-// inline static float bit2angle(const ushort &angle_bit) {
+// inline static float ori2angle(const ushort &orientation) {
 //   float init_angle = 180.0f / 32.0f;
 //   for (int i = 0; i < 16; i++) {
-//     if (angle_bit & (1 << i)) {
+//     if (orientation & (1 << i)) {
 //       return init_angle + (180.0f / 16.0f) * i;
 //     }
 //   }
-//   return 0.0f;  // angle_bit == 0
+//   return 0.0f;  // orientation == 0
 // }
