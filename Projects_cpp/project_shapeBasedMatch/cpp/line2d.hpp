@@ -3,32 +3,55 @@
 
 #include <array>
 #include <bitset>
+#include <chrono>
 #include <iostream>
 #include <map>
 #include <opencv2/opencv.hpp>
 #include <random>
 #include <vector>
 
+class Timer {
+ public:
+  Timer() : beg_(clock_::now()) {}
+  void reset() { beg_ = clock_::now(); }
+  double elapsed() const {
+    return std::chrono::duration_cast<second_>(clock_::now() - beg_).count();
+  }
+  void out(std::string message = "") {
+    double t = elapsed();
+    std::cout << message << "\nelasped time:" << t << "s\n" << std::endl;
+    reset();
+  }
+
+ private:
+  typedef std::chrono::high_resolution_clock clock_;
+  typedef std::chrono::duration<double, std::ratio<1>> second_;
+  std::chrono::time_point<clock_> beg_;
+};
+
 #define line2d_eps 1e-7f
+#define _degree_(x) ((x)*CV_PI) / 180.0
+
+namespace line2d {
 
 /// @brief 图像金字塔
 class ImagePyramid {
  public:
   ImagePyramid();
 
-  ImagePyramid(const cv::Mat &src, int level_size);
+  ImagePyramid(const cv::Mat &src, int py_level);
 
-  const cv::Mat &operator[](int index) const;
+  cv::Mat &operator[](int index);
 
   /// @brief 读取图像以初始化图像金字塔
   /// @param src 输入图像矩阵
-  /// @param levels 金字塔最高层数evels
-  void buildPyramid(const cv::Mat &src, int levels = 0);
+  /// @param pyramid_level 金字塔最高层数evels
+  void buildPyramid(const cv::Mat &src, int pyramid_level = 0);
 
  private:
-  int levels;                    // 图像金字塔层级
+  int pyramid_level;                    // 图像金字塔层级
   std::vector<cv::Mat> pyramid;  // 图像 vector 序列: 最底层为裁剪后的原始图像,
-                                 // 最高层为缩放 1<<levels 倍的图像
+                                 // 最高层为缩放 1<<pyramid_level 倍的图像
 };
 
 /// @brief 形状日志生成器
@@ -131,21 +154,38 @@ class Template {
   struct TemplateParams {
     int num_features;
     float grad_norm;
-    bool template_crated;
+    bool template_created;
     int nms_kernel_size;
     float scatter_distance;
+    bool isDefault;
+
     TemplateParams() {
       num_features = 200;
       grad_norm = 0.2f;
-      template_crated = false;
+      template_created = false;
       nms_kernel_size = 7;
       scatter_distance = 10.0f;
+      isDefault = true;
+    }
+
+    // 重载赋值运算符
+    TemplateParams& operator=(const TemplateParams& other) {
+      if (this == &other) {
+        return *this;
+      }
+      num_features = other.num_features;
+      grad_norm = other.grad_norm;
+      template_created = other.template_created;
+      nms_kernel_size = other.nms_kernel_size;
+      scatter_distance = other.scatter_distance;
+      isDefault = false;
+      return *this;
     }
   };
 
   Template();
 
-  Template(TemplateParams params);
+  Template(TemplateParams params, bool isDefault = false);
 
   static void getOriMat(const cv::Mat &src, cv::Mat &edges, cv::Mat &angles);
 
@@ -156,6 +196,8 @@ class Template {
   static cv::Ptr<Template> createPtr_from(
       const cv::Mat &src, TemplateParams params = TemplateParams());
 
+  void create_from(const cv::Mat &src);
+  
   void selectFeatures_from(const cv::Mat &_edges, const cv::Mat &_angles,
                            int nms_kernel_size = 3);
 
@@ -168,6 +210,7 @@ class Template {
   const std::vector<Features> &pg_ptr() const { return prograds; };
 
  private:
+  TemplateParams defaultParams;    // 默认参数列表
   int nms_kernel_size;             // 非极大值抑制的窗口大小
   float scatter_distance;          // 离散化特征点之间的最小距离
   float grad_norm;                 // 最小梯度阈值 取值范围 [0, 1.0)
@@ -191,47 +234,40 @@ class Detector {
 
   class LinearMemories {
    private:
-    std::vector<std::vector<std::vector<float>>> memories;  // 线性存储器
+    std::vector<std::vector<float>> memories;  // 线性存储器
 
    public:
     int rows;
     int cols;
 
-    int linear_size() {
-      return memories[0][0].size();
-    }
+    int linear_size() { return memories[0].size(); }
 
-    void resize(size_t x, size_t y, size_t z) {
+    void resize(size_t x, size_t y) {
       memories.resize(x);
       for (size_t i = 0; i < x; i++) {
         memories[i].resize(y);
-        for (size_t j = 0; j < y; j++) {
-          memories[i][j].resize(z);
-        }
       }
     }
 
-    /// @brief memories[i][j][k] -> linearized S_i(c)
-    /// @param i -> orientation
-    /// @param j -> order in TxT kernel
-    /// @param k -> index in linear vector
-    /// @return &memories[i][j][k]
-    float &at(int i, int j, int k) {
+    /// @brief memories[i][j] -> linearized Mat S_{orientaion}(c)
+    /// @param i -> order in TxT kernel
+    /// @param j -> index in linear vector
+    /// @return &memories[i][j]
+    float &at(size_t i, size_t j) {
       static float default_value = 0.0f;  // 静态的默认值
       if (i < 0 || i >= memories.size()) return default_value;
       if (j < 0 || j >= memories[0].size()) return default_value;
-      if (k < 0 || k >= memories[0][0].size()) return default_value;
-      return memories[i][j][k];
+      return memories[i][j];
     }
   };
 
   int pyramid_level;
   ImagePyramid src_pyramid;
   ImagePyramid temp_pyramid;
-  std::vector<LinearMemories> memory_pyramid;
+  std::vector<std::vector<LinearMemories>> memory_pyramid;
   std::vector<cv::Ptr<Template>> temps;
   std::vector<MatchPoint> match_points;
-  std::vector<float> cos_table;
+  static std::vector<float> cos_table;
 
   Detector();
 
@@ -245,16 +281,20 @@ class Detector {
   static void computeResponseMaps(cv::Mat &spread_ori,
                                   std::vector<cv::Mat> &response_maps);
 
-  static void computeSimilarityMap(LinearMemories &memories, Template &temp,
-                                   std::vector<std::vector<float>> &similarity_map);
+  static void computeSimilarityMap(std::vector<LinearMemories> &memories,
+                                   Template &temp, LinearMemories &similarity);
 
-  static void localSimilarityMap(LinearMemories &memories, Template &temp,
-                                  cv::Mat &similarity_map, cv::Rect roi = cv::Rect());
+  static void localSimilarityMap(std::vector<LinearMemories> &memories,
+                                 Template &temp, cv::Mat &similarity_map,
+                                 std::vector<cv::Rect> &roi_list);
 
   static void linearize(std::vector<cv::Mat> &response_maps,
-                        LinearMemories &linearized_memories);
-  
-  static void produceRoi(std::vector<MatchPoint> &input_points, cv::Mat &roi, int lower_score, int grad_size = 3);
+                        std::vector<LinearMemories> &linearized_memories);
+
+  static void unlinearize(LinearMemories &similarity, cv::Mat &similarity_map);
+
+  static void produceRoi(cv::Mat &similarity_map,
+                         std::vector<cv::Rect> &roi_list, int lower_score);
 
   void setSourceImage(const cv::Mat &src, int pyramid_level = 2,
                       cv::Mat mask = cv::Mat());
@@ -263,8 +303,11 @@ class Detector {
                   Template::TemplateParams params = Template::TemplateParams(),
                   cv::Mat mask = cv::Mat());
 
+  void selectMatchPoints(cv::Mat &similarity_map,
+                         std::vector<cv::Rect> &roi_list, int lower_score);
+
   void match(const cv::Mat &sourceImage, const cv::Mat &templateImage,
-             float lower_score = 90,
+             int lower_score = 90,
              Template::TemplateParams params = Template::TemplateParams(),
              cv::Mat mask_src = cv::Mat(), cv::Mat mask_temp = cv::Mat());
 
@@ -272,32 +315,6 @@ class Detector {
   void init_costable();
 };
 
+}  // namespace line2d
+
 #endif  // OPENCV_LINE_2D_HPP
-
-// void init_costable() {
-//   int maxValue = std::numeric_limits<ushort>::max();
-//   cos_table = std::vector<float>(16 * maxValue);
-//   float maxCos;
-//   for (int i = 1; i <= maxValue; i++) {
-//     for (int j = 0; j < 16; j++) {
-//       maxCos = 0.0f;
-//       for (int k = 0; k < 16; k++) {
-//         if ((ushort(i)) & (1 << k))
-//           maxCos = maxCos < abs(cos(ori2angle(1 << k) - ori2angle(1 << j)))
-//                        ? abs(cos(ori2angle(1 << k) - ori2angle(1 << j)))
-//                        : maxCos;
-//       }
-//       cos_table[i * 16 + j] = maxCos;
-//     }
-//   }
-// }
-
-// inline static float ori2angle(const ushort &orientation) {
-//   float init_angle = 180.0f / 32.0f;
-//   for (int i = 0; i < 16; i++) {
-//     if (orientation & (1 << i)) {
-//       return init_angle + (180.0f / 16.0f) * i;
-//     }
-//   }
-//   return 0.0f;  // orientation == 0
-// }

@@ -1,15 +1,16 @@
 #include "line2d.hpp"
 using namespace cv;
 using namespace std;
+using namespace line2d;
 
-int main() {
-  Mat image = imread("../imagelib/Template.jpg", IMREAD_COLOR);
-  Ptr<shapeInfo_producer> sip = shapeInfo_producer::load_config(image);
-  // Ptr<shapeInfo_producer> sip = makePtr<shapeInfo_producer>(image);
+void template_test() {
+  Mat image = imread("../imagelib/mount.png", IMREAD_COLOR);
+
+  Ptr<shapeInfo_producer> sip = makePtr<shapeInfo_producer>(image);
   sip->produce_infos();
 
   Template::TemplateParams params;
-  params.num_features = 20;
+  params.num_features = 50;
   Ptr<Template> tp = makePtr<Template>(params);
 
   for (const auto &info : sip->Infos_constptr()) {
@@ -20,7 +21,7 @@ int main() {
     sip->src_of(info).copyTo(templateImage, sip->mask_of(info));
 
     if (!tp->iscreated())
-      tp = Template::createPtr_from(image, params);
+      tp->create_from(templateImage);
     vector<Template::Features> featurePoints = tp->relocate_by(info);
 
     Point center(templateImage.cols / 2, templateImage.rows / 2);
@@ -32,5 +33,19 @@ int main() {
     imshow("templateImage", templateImage);
     waitKey();
   }
+}
+
+int main() {
+  // template_test();
+
+  Mat sourceImage = imread("../imagelib/mounts.png", IMREAD_GRAYSCALE);
+  Mat templateImage = imread("../imagelib/mount.png", IMREAD_COLOR);
+
+  Template::TemplateParams params;
+  params.num_features = 50;
+  params.nms_kernel_size = 3;
+  Detector detector;
+  detector.match(sourceImage, templateImage, 90, params);
+
   return 0;
 }
