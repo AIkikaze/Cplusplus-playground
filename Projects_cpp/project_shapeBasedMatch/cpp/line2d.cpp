@@ -2,6 +2,19 @@
 using namespace std;
 using namespace line2d;
 
+void __onMouse(int event, int x, int y, int flags, void *userdata) {
+  if (event == cv::EVENT_LBUTTONDOWN) {
+    cv::Mat *image = static_cast<cv::Mat *>(userdata);
+    if (image != nullptr && !image->empty()) {
+      if (x >= 0 && x < image->cols && y >= 0 && y < image->rows) {
+        auto pixel = image->at<float>(y, x);
+        std::cout << "Pixel value at (" << x << ", " << y << "): " << pixel
+                  << std::endl;
+      }
+    }
+  }
+}
+
 vector<float> Detector::cos_table;
 
 ImagePyramid::ImagePyramid() {
@@ -227,8 +240,8 @@ void Template::getOriMat(const cv::Mat &src, cv::Mat &edges, cv::Mat &angles) {
   // 计算梯度模长和方向角
   if (src.channels() == 1) {  // src 为单通道图像
     // cv::GaussianBlur(imgs[0], imgs[0], Size(5, 5), 1.5);
-    cv::Scharr(imgs[0], gx, CV_32F, 1, 0, 3);
-    cv::Scharr(imgs[0], gy, CV_32F, 0, 1, 3);
+    cv::Scharr(imgs[0], gx, CV_32F, 1, 0, 1.0, 0.0, cv::BORDER_REPLICATE);
+    cv::Scharr(imgs[0], gy, CV_32F, 0, 1, 1.0, 0.0, cv::BORDER_REPLICATE);
     for (int i = 0; i < edges.rows; i++) {
       for (int j = 0; j < edges.cols; j++) {
         edges.at<float>(i, j) = sqrt(gx.at<float>(i, j) * gx.at<float>(i, j) +
@@ -244,8 +257,8 @@ void Template::getOriMat(const cv::Mat &src, cv::Mat &edges, cv::Mat &angles) {
     vector<cv::Mat> cangles(3, cv::Mat::zeros(src.size(), CV_32F));
     for (int k = 0; k < 3; k++) {
       // GaussianBlur(imgs[k], imgs[k], Size(5, 5), 1.5);
-      cv::Scharr(imgs[k], gx, CV_32F, 1, 0);
-      cv::Scharr(imgs[k], gy, CV_32F, 0, 1);
+      cv::Scharr(imgs[k], gx, CV_32F, 1, 0, 1.0, 0.0, cv::BORDER_REPLICATE);
+      cv::Scharr(imgs[k], gy, CV_32F, 0, 1, 1.0, 0.0, cv::BORDER_REPLICATE);
       for (int i = 0; i < edges.rows; i++) {
         for (int j = 0; j < edges.cols; j++) {
           cedges[k].at<float>(i, j) =
@@ -377,15 +390,15 @@ void Template::selectFeatures_from(const cv::Mat &_edges,
   }
 
   // 非极大值抑制
-  cv::Range rows(nms_kernel_size / 2, nms_kernel_size / 2 + edges.rows);
-  cv::Range cols(nms_kernel_size / 2, nms_kernel_size / 2 + edges.cols);
-  cv::copyMakeBorder(edges, edges, nms_kernel_size / 2, nms_kernel_size / 2,
-                     nms_kernel_size / 2, nms_kernel_size / 2,
-                     cv::BORDER_CONSTANT, cv::Scalar(0));
-  for (int i = rows.start; i < rows.end; i++) {
-    for (int j = cols.start; j < cols.end; j++) {
+  // cv::Range rows(nms_kernel_size / 2, nms_kernel_size / 2 + edges.rows);
+  // cv::Range cols(nms_kernel_size / 2, nms_kernel_size / 2 + edges.cols);
+  // cv::copyMakeBorder(edges, edges, nms_kernel_size / 2, nms_kernel_size / 2,
+  //                    nms_kernel_size / 2, nms_kernel_size / 2,
+  //                    cv::BORDER_CONSTANT, cv::Scalar(0));
+  for (int i = 0; i < edges.rows; i++) {
+    for (int j = 0; j < edges.cols; j++) {
       float prevPixel, nextPixel;
-      switch ((int)angles.at<uchar>(i - rows.start, j - cols.start)) {
+      switch ((int)angles.at<uchar>(i, j)) {
         case 0:
           prevPixel = edges.at<float>(i, j - 1);
           nextPixel = edges.at<float>(i, j + 1);
@@ -411,19 +424,18 @@ void Template::selectFeatures_from(const cv::Mat &_edges,
     }
   }
   // cv::Mat edgesImage;
-  // normalize(edges, edgesImage, 0, 255, NORM_MINMAX, CV_8U);
-  // namedWindow("edges after nms");
-  // imshow("edges after nms", edges);
-  // waitKey();
-  // namedWindow("angles after quantized");
-  // imshow("angles after quantized", angles);
-  // waitKey();
+  // cv::normalize(edges, edgesImage, 0, 255, cv::NORM_MINMAX, CV_8U);
+  // cv::namedWindow("edges after nms", cv::WINDOW_NORMAL);
+  // cv::imshow("edges after nms", edges);
+  // cv::waitKey();
+  // cv::namedWindow("angles after quantized", cv::WINDOW_NORMAL);
+  // cv::imshow("angles after quantized", angles);
+  // cv::waitKey();
 
   // 计算领域中出现次数最多的量化特征方向
-  cv::Mat orientation_map = cv::Mat::ones(_angles.size(), CV_8U);
-  orientation_map *= 31;
-  for (int i = rows.start; i < rows.end; i++) {
-    for (int j = cols.start; j < cols.end; j++) {
+  cv::Mat orientation_map = cv::Mat::zeros(_angles.size(), CV_8U);
+  for (int i = 0; i < edges.rows; i++) {
+    for (int j = 0; j < edges.cols; j++) {
       if (_edges.at<float>(i, j) <= grad_norm) continue;
       int max_count = 0;
       int orientaion = 0;
@@ -432,8 +444,7 @@ void Template::selectFeatures_from(const cv::Mat &_edges,
         for (int dx = -nms_kernel_size / 2; dx < nms_kernel_size / 2 + 1;
              dx++) {
           if (_edges.at<float>(i + dy, j + dx) > grad_norm) {
-            int _ori = angle2ori(
-                _angles.at<float>(i - rows.start + dy, j - cols.start + dx));
+            int _ori = angle2ori(_angles.at<float>(i + dy, j + dx));
             ori_count[_ori]++;
             if (ori_count[_ori] > max_count) {
               max_count = ori_count[_ori];
@@ -442,7 +453,7 @@ void Template::selectFeatures_from(const cv::Mat &_edges,
           }
         }
       }
-      orientation_map.at<uchar>(i - rows.start, j - cols.start) = orientaion;
+      orientation_map.at<uchar>(i, j) = orientaion;
     }
   }
   // cv::namedWindow("orientation_map", cv::WINDOW_NORMAL);
@@ -451,8 +462,8 @@ void Template::selectFeatures_from(const cv::Mat &_edges,
 
   // 取领域中的梯度值最大的点为特征点
   cv::Point center(edges.cols / 2, edges.rows / 2);
-  for (int i = rows.start; i < rows.end; i++) {
-    for (int j = cols.start; j < cols.end; j++) {
+  for (int i = 0; i < edges.rows; i++) {
+    for (int j = 0; j < edges.cols; j++) {
       if (edges.at<float>(i, j) <= grad_norm) continue;
       for (int dy = -nms_kernel_size / 2; dy < nms_kernel_size / 2 + 1; dy++) {
         if (edges.at<float>(i, j) <= grad_norm) break;
@@ -465,12 +476,10 @@ void Template::selectFeatures_from(const cv::Mat &_edges,
         }
       }
       if (edges.at<float>(i, j) > grad_norm) {
-        prograds.push_back(
-            Features(cv::Point(j - center.x, i - center.y),
-                     _angles.at<float>(i - rows.start, j - cols.start),
-                     _edges.at<float>(i, j)));
-        prograds.back().orientation =
-            (int)orientation_map.at<uchar>(i - rows.start, j - cols.start);
+        prograds.push_back(Features(cv::Point(j - center.x, i - center.y),
+                                    _angles.at<float>(i, j),
+                                    _edges.at<float>(i, j)));
+        prograds.back().orientation = (int)orientation_map.at<uchar>(i, j);
       }
     }
   }
@@ -548,6 +557,23 @@ vector<Template::Features> Template::relocate_by(
   return new_prograds;
 }
 
+void Template::show_in(const cv::Mat &background, cv::Point center) {
+  cv::Mat templateImage;
+  if (background.type() == CV_8U)
+    cv::cvtColor(background, templateImage, cv::COLOR_GRAY2BGR);
+  else
+    templateImage = background.clone();
+
+  for (const auto &pg : prograds) {
+    cv::circle(templateImage, center + pg.p_xy, 1, cv::Scalar(0, 0, 255), -1);
+  }
+  cv::circle(templateImage, center, 1, cv::Scalar(0, 255, 0), -1);
+
+  cv::namedWindow("templateImage", cv::WINDOW_NORMAL);
+  cv::imshow("templateImage", templateImage);
+  cv::waitKey();
+}
+
 Detector::Detector() {
   pyramid_level = 2;
   init_costable();
@@ -566,6 +592,9 @@ void Detector::quantize(const cv::Mat &edges, const cv::Mat &angles,
       int ori_count[16] = {0};
       for (int dy = -kernel_size / 2; dy < kernel_size / 2 + 1; dy++) {
         for (int dx = -kernel_size / 2; dx < kernel_size / 2 + 1; dx++) {
+          if (i + dy < 0 || i + dy >= edges.rows || j + dx < 0 ||
+              j + dx >= edges.cols)
+            continue;
           if (edges.at<float>(i + dy, j + dx) > grad_norm) {
             int _ori = angle2ori(angles.at<float>(i + dy, j + dx));
             ori_count[_ori]++;
@@ -597,12 +626,14 @@ void Detector::spread(cv::Mat &ori_bit, cv::Mat &spread_ori, int kernel_size) {
         for (int dx = -kernel_size / 2; dx < kernel_size / 2 + 1; dx++) {
           int u = i + dy;
           int v = j + dx;
-          if (u < 0 || u >= ori_bit.rows || v < 0 || v >= ori_bit.cols || !ori_bit.at<ushort>(u, v)) continue;
+          if (u < 0 || u >= ori_bit.rows || v < 0 || v >= ori_bit.cols ||
+              !ori_bit.at<ushort>(u, v))
+            continue;
           // cout << "point in kernel:" << u << "," << v << endl;
           // cout << "oir_bit:" << bitset<16>(ori_bit.at<ushort>(u, v)) << endl;
           spread_ori.at<ushort>(i, j) |= ori_bit.at<ushort>(u, v);
-          // cout << "spread_ori:" << bitset<16>(spread_ori.at<ushort>(i, j)) << endl;
-          // cin.get();
+          // cout << "spread_ori:" << bitset<16>(spread_ori.at<ushort>(i, j)) <<
+          // endl; cin.get();
         }
       }
     }
@@ -610,17 +641,32 @@ void Detector::spread(cv::Mat &ori_bit, cv::Mat &spread_ori, int kernel_size) {
 }
 
 void Detector::computeResponseMaps(cv::Mat &spread_ori,
-                                   std::vector<cv::Mat> &response_maps) {
+                                   vector<cv::Mat> &response_maps) {
   response_maps.resize(16);
+  for (int i = 0; i < 16; i++)
+    response_maps[i] = cv::Mat::zeros(spread_ori.size(), CV_32F);
+
   int maxValue = numeric_limits<ushort>::max();
-  for (int orientation = 0; orientation < 16; orientation++) {
-    for (int i = 0; i < spread_ori.rows; i++) {
-      for (int j = 0; j < spread_ori.cols; j++) {
-        if (!spread_ori.at<ushort>(i, j)) continue;
+  for (int i = 0; i < spread_ori.rows; i++) {
+    for (int j = 0; j < spread_ori.cols; j++) {
+      if (!spread_ori.at<ushort>(i, j)) continue;
+      for (int orientation = 0; orientation < 16; orientation++) {
+        // cout << "(debug)" << endl;
         response_maps[orientation].at<float>(i, j) =
             cos_table[orientation * maxValue +
                       (int)spread_ori.at<ushort>(i, j)];
+        // for (int k = 0; k < 16; k++) {
+        //   cout << "cos_table at [" << k << "," << i << "," << j
+        //        << "]:" << cos_table[k * maxValue +
+        //               (int)spread_ori.at<ushort>(i, j)] << endl;
+        // }
+        // for (int k = 0; k < 16; k++) {
+        //   cout << "response_map at [" << k << "," << i << "," << j
+        //        << "]:" << response_maps[k].at<float>(i, j) << endl;
+        // }
+        // cin.get();
       }
+      // cin.get();
     }
   }
 }
@@ -628,28 +674,54 @@ void Detector::computeResponseMaps(cv::Mat &spread_ori,
 void Detector::computeSimilarityMap(vector<LinearMemories> &memories,
                                     Template &temp,
                                     LinearMemories &similarity) {
-  int n_rows = memories[0].rows * 4;
-  int n_cols = memories[0].cols * 4;
+  // for (int j = 0; j < 16; j++) {
+  //   cv::Mat resImage, res_map;
+  //   unlinearize(memories[j], res_map);
+  //   resImage = (res_map + 1) * (255.0f / 2);
+  //   resImage.convertTo(resImage, CV_8U);
+  //   temp.show_in(resImage, cv::Point(resImage.cols/2, resImage.rows/2));
+  // }
   // similarity[i][j]
   // i -> order in kernel ; j -> index in linear vector
-  similarity.resize(16, memories[0].linear_size());
+  similarity.create(16, memories[0].linear_size(), 0.0f);
+  similarity.rows = memories[0].rows;
+  similarity.cols = memories[0].cols;
+  // cout << similarity.rows << "x" << similarity.cols << ":"
+  //      << similarity.linear_size() << endl;
+  // cin.get();
 
   for (int i = 0; i < 16; i++) {
     cv::Point start = cv::Point(i % 4, i / 4);
     for (const auto &pg : temp.pg_ptr()) {
       cv::Point cur = pg.p_xy + start;
-      if (cur.x < 0 || cur.x >= n_rows || cur.y < 0 || cur.y >= n_cols)
-        continue;
-      // 计算坐标在线性存储器中的当前位置
-      int position_cur = cur.y / 4 * memories[0].cols + cur.x / 4;
-      // 计算坐标能够移动到的最大位置
-      int position_end = (n_rows - 1 - cur.y) / 4 * memories[0].cols +
-                         (n_cols - 1 - cur.x) / 4;
-      // 计算坐标在 TxT 分块中的顺序索引
-      int order_kernel = (cur.y % 4) * 4 + cur.x % 4;
+      cv::Range range_x, range_y;
+      if (cur.x < 0)
+        range_x = cv::Range( (-cur.x) / 4, similarity.cols);
+      else
+        range_x = cv::Range(0, (similarity.cols * 4 - cur.x - 1) / 4);
+
+      if (cur.y < 0)
+        range_y = cv::Range( (-cur.y) / 4, similarity.rows);
+      else
+        range_y = cv::Range(0, (similarity.rows * 4 - cur.y - 1) / 4);
+
+      int mod_y = cur.y % 4 < 0 ? (cur.y % 4) + 4 : cur.y % 4;
+      int mod_x = cur.x % 4 < 0 ? (cur.x % 4) + 4 : cur.x % 4;
+
+      // cout << "(debug)" << endl;
+      // cout << "坐标:" << cur.y << "," << cur.x << endl;
+      // cout << "order in kernel:" << order_kernel << endl;
+      // cout << "cur position in linear vector:" << position_cur << endl;
+      // cout << "end position in linear vector:" << position_end << endl;
+      // cin.get();
+
       // 计算相似度矩阵
-      for (int j = position_cur; j <= position_end; j++) {
-        similarity.at(i, j) += memories[pg.orientation].at(order_kernel, j);
+      for (int y = range_y.start; y < range_y.end; y++) {
+        for (int x = range_x.start; x < range_x.end; x++) {
+          similarity.at(i, y * similarity.cols + x) +=
+              memories[pg.orientation].at(mod_y * 4 + mod_x,
+                                          y * similarity.cols + x);
+        }
       }
     }
   }
@@ -657,7 +729,8 @@ void Detector::computeSimilarityMap(vector<LinearMemories> &memories,
   // 转化为 100 分制
   for (int i = 0; i < 16; i++) {
     for (int j = 0; j < memories[0].linear_size(); j++) {
-      similarity.at(i, j) /= (float)temp.pg_ptr().size() * 100.0f;
+      similarity.at(i, j) =
+          similarity.at(i, j) / (float)temp.pg_ptr().size() * 100.0f;
     }
   }
 }
@@ -665,9 +738,12 @@ void Detector::computeSimilarityMap(vector<LinearMemories> &memories,
 void Detector::localSimilarityMap(vector<LinearMemories> &memories,
                                   Template &temp, cv::Mat &similarity_map,
                                   vector<cv::Rect> &rois) {
-  CV_Assert(!rois.empty());
+  // CV_Assert(!rois.empty());
   int n_rows = memories[0].rows * 4;
   int n_cols = memories[0].cols * 4;
+  if (rois.empty()) {
+    rois.push_back(cv::Rect(0, 0, n_cols-1, n_rows-1));
+  }
 
   similarity_map = cv::Mat::zeros(n_rows, n_cols, CV_32F);
 
@@ -695,34 +771,48 @@ void Detector::localSimilarityMap(vector<LinearMemories> &memories,
   }
 
   // 转化为 100 分制
-  for (int i = 0; i < n_rows; i++) {
-    for (int j = 0; j < n_cols; j++) {
-      similarity_map.at<float>(i, j) /= (float)temp.pg_ptr().size() * 100.0f;
-    }
-  }
+  similarity_map = similarity_map / (float)temp.pg_ptr().size() * 100.0f;
 }
 
 void Detector::linearize(std::vector<cv::Mat> &response_maps,
                          vector<LinearMemories> &linearized_memories) {
+  // 计算分块后矩阵的行数, 列数
   int n_rows = response_maps[0].rows / 4;
   int n_cols = response_maps[0].cols / 4;
 
+  // 初始化 linearized_memories, 16 -> 16 个量化方向
   linearized_memories.resize(16);
   for (int i = 0; i < 16; i++) {
-    linearized_memories[i].resize(16, n_rows * n_cols);
-    linearized_memories[i].rows = n_rows;
-    linearized_memories[i].cols = n_cols;
+    linearized_memories[i].create(16,
+                                  n_rows * n_cols);  // 16 -> 线性化单元块的大小
+    linearized_memories[i].rows = n_rows;  // 记录行数 (便于后续还原)
+    linearized_memories[i].cols = n_cols;  // 记录列数 (便于后续还原)
   }
 
+  // cout << "(debug)" << endl;
+  // cout << "分块矩阵大小:" << n_rows << "x" << n_cols << endl;
   for (int orientation = 0; orientation < 16; orientation++) {
     for (int i = 0; i < n_rows; i++) {
       for (int j = 0; j < n_cols; j++) {
-        for (int di = 0; di < 3; di++) {
-          for (int dj = 0; dj < 3; dj++) {
+        for (int di = 0; di < 4; di++) {
+          for (int dj = 0; dj < 4; dj++) {
+            // if (abs(response_maps[orientation].at<float>(4 * i + di, 4 * j +
+            // dj)) < line2d_eps) continue; cout << "分块坐标:" << i << "," << j
+            // << endl; cout << "单像素坐标:" << 4*i + di << "," << 4*j + dj <<
+            // endl; cout << "order in kernel:" << di * 4 + dj << endl; cout <<
+            // "index in linear vector:" << i * n_cols + j << endl; cout <<
+            // "response_maps:" << response_maps[orientation].at<float>(4 * i +
+            // di, 4 * j + dj) << endl; cout << "linearized_memories:" <<
+            // linearized_memories[orientation].at(di * 4 + dj,
+            //                                     i * n_cols + j) << endl;
             int order_in_kernel = di * 4 + dj;
             linearized_memories[orientation].at(order_in_kernel,
                                                 i * n_cols + j) =
-                response_maps[orientation].at<float>(i + di, j + dj);
+                response_maps[orientation].at<float>(4 * i + di, 4 * j + dj);
+            // cout << "linearized_memories:" <<
+            // linearized_memories[orientation].at(di * 4 + dj,
+            //                                     i * n_cols + j) << endl;
+            // cin.get();
           }
         }
       }
@@ -736,8 +826,8 @@ void Detector::unlinearize(LinearMemories &similarity,
       cv::Mat::zeros(similarity.rows * 4, similarity.cols * 4, CV_32F);
   for (int i = 0; i < 16; i++) {
     for (int j = 0; j < similarity.linear_size(); j++) {
-      int u = j / similarity.cols + i / 4;
-      int v = j % similarity.cols + i % 4;
+      int u = (j / similarity.cols) * 4 + i / 4;
+      int v = (j % similarity.cols) * 4 + i % 4;
       similarity_map.at<float>(u, v) = similarity.at(i, j);
     }
   }
@@ -746,8 +836,11 @@ void Detector::unlinearize(LinearMemories &similarity,
 void Detector::produceRoi(cv::Mat &similarity_map,
                           std::vector<cv::Rect> &roi_list, int lower_score) {
   cv::Mat binary_mat;
-  cv::threshold(similarity_map, binary_mat, lower_score, 1.0,
+  cv::threshold(similarity_map, binary_mat, lower_score, 100.0,
                 cv::THRESH_BINARY);
+  cv::namedWindow("binaryImage", cv::WINDOW_NORMAL);
+  cv::imshow("binaryImage", binary_mat);
+  cv::waitKey();
 
   cv::Mat labels, stats, centroids;
   int numLabels =
@@ -784,6 +877,8 @@ void Detector::setTempate(const cv::Mat &temp_src, int pyramid_level,
 
   for (int i = 0; i < pyramid_level; i++) {
     cv::Ptr<Template> tp = Template::createPtr_from(temp_pyramid[i], params);
+    tp->show_in(temp_pyramid[i],
+                cv::Point(temp_pyramid[i].cols / 2, temp_pyramid[i].rows / 2));
     if (tp->iscreated())
       temps.push_back(tp);
     else
@@ -839,6 +934,7 @@ void Detector::match(const cv::Mat &sourceImage, const cv::Mat &templateImage,
   setTempate(templateImage, pyramid_level, params, mask_temp);
 
   // 计算梯度响应矩阵
+  memory_pyramid.resize(pyramid_level);
   for (int i = 0; i < pyramid_level; i++) {
     cv::Mat edges, angles;
     Template::getOriMat(src_pyramid[i], edges, angles);
@@ -858,11 +954,28 @@ void Detector::match(const cv::Mat &sourceImage, const cv::Mat &templateImage,
     // cv::imshow("spreadImage", spreadImage);
     // cv::waitKey();
 
-    vector<cv::Mat> response_maps(
-        16, cv::Mat::zeros(src_pyramid[i].size(), CV_32F));
+    vector<cv::Mat> response_maps;
     computeResponseMaps(spread_ori, response_maps);
+    // for (int i = 0; i < 16; i++) {
+    //   cv::Mat responseImage;
+    //   cv::namedWindow("responseImage " + to_string(i + 1),
+    //   cv::WINDOW_NORMAL); responseImage = (response_maps[i] + 1) * (255.0f /
+    //   2); responseImage.convertTo(responseImage, CV_8U);
+    //   cv::imshow("responseImage " + to_string(i + 1), responseImage);
+    //   cv::waitKey();
+    // }
 
     linearize(response_maps, memory_pyramid[i]);
+
+    // for (int j = 0; j < 16; j++) {
+    //   cv::Mat resImage, res_map;
+    //   unlinearize(memory_pyramid[i][j], res_map);
+    //   cv::namedWindow("resImage " + to_string(j + 1), cv::WINDOW_NORMAL);
+    //   resImage = (res_map + 1) * (255.0f / 2);
+    //   resImage.convertTo(resImage, CV_8U);
+    //   cv::imshow("resImage " + to_string(j + 1), resImage);
+    //   cv::waitKey();
+    // }
   }
 
   // 从最高层开始相似度匹配
@@ -875,6 +988,23 @@ void Detector::match(const cv::Mat &sourceImage, const cv::Mat &templateImage,
                        similarity);
 
   unlinearize(similarity, similarity_map);
+  cv::Mat similarityImage;
+  cv::namedWindow("similarityImage", cv::WINDOW_NORMAL);
+  cv::normalize(similarity_map, similarityImage, 0, 255, cv::NORM_MINMAX,
+                CV_8U);
+  cv::imshow("similarityImage", similarityImage);
+  cv::setMouseCallback("similarityImage", __onMouse, &similarity_map);
+  cv::waitKey();
+
+  localSimilarityMap(memory_pyramid[match_level], *temps[match_level],
+                       similarity_map, rois);
+  cv::namedWindow("localsimilarityImage", cv::WINDOW_NORMAL);
+  cv::normalize(similarity_map, similarityImage, 0, 255, cv::NORM_MINMAX,
+                CV_8U);
+  cv::imshow("localsimilarityImage", similarityImage);
+  cv::setMouseCallback("localsimilarityImage", __onMouse, &similarity_map);
+  cv::waitKey();
+      
 
   produceRoi(similarity_map, rois, lower_score);
 
@@ -906,7 +1036,7 @@ void Detector::init_costable() {
   for (int i = 0; i < 16; i++) {
     // time.out(to_string(i+1)+"轮循环 65535 * 16 计算开始");
     for (int bit = 1; bit <= maxValue; bit++) {
-      maxCos = 0.0f;
+      maxCos = -2.0f;  // < -1 = min_theta cos theta
       for (int k = 0; k < 16; k++) {
         if (bit & (1 << k)) {
           maxCos = maxCos < cos(abs(i - k) * _degree_(11.25f))

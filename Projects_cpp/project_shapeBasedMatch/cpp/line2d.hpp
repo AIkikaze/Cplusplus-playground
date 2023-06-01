@@ -49,7 +49,7 @@ class ImagePyramid {
   void buildPyramid(const cv::Mat &src, int pyramid_level = 0);
 
  private:
-  int pyramid_level;                    // 图像金字塔层级
+  int pyramid_level;  // 图像金字塔层级
   std::vector<cv::Mat> pyramid;  // 图像 vector 序列: 最底层为裁剪后的原始图像,
                                  // 最高层为缩放 1<<pyramid_level 倍的图像
 };
@@ -169,7 +169,7 @@ class Template {
     }
 
     // 重载赋值运算符
-    TemplateParams& operator=(const TemplateParams& other) {
+    TemplateParams &operator=(const TemplateParams &other) {
       if (this == &other) {
         return *this;
       }
@@ -197,7 +197,7 @@ class Template {
       const cv::Mat &src, TemplateParams params = TemplateParams());
 
   void create_from(const cv::Mat &src);
-  
+
   void selectFeatures_from(const cv::Mat &_edges, const cv::Mat &_angles,
                            int nms_kernel_size = 3);
 
@@ -209,6 +209,8 @@ class Template {
 
   const std::vector<Features> &pg_ptr() const { return prograds; };
 
+  void show_in(const cv::Mat &background, cv::Point center);
+
  private:
   TemplateParams defaultParams;    // 默认参数列表
   int nms_kernel_size;             // 非极大值抑制的窗口大小
@@ -219,7 +221,6 @@ class Template {
   std::vector<Features> prograds;  // 特征方向序列
 };
 
-/// @todo 完成检测算子类
 class Detector {
  public:
   struct MatchPoint {
@@ -242,11 +243,8 @@ class Detector {
 
     int linear_size() { return memories[0].size(); }
 
-    void resize(size_t x, size_t y) {
-      memories.resize(x);
-      for (size_t i = 0; i < x; i++) {
-        memories[i].resize(y);
-      }
+    void create(size_t x, size_t y, float value = 0.0f) {
+      memories = std::vector<std::vector<float>>(x, std::vector<float>(y, value));
     }
 
     /// @brief memories[i][j] -> linearized Mat S_{orientaion}(c)

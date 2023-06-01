@@ -4,7 +4,7 @@ using namespace std;
 using namespace line2d;
 
 void template_test() {
-  Mat image = imread("../imagelib/mount.png", IMREAD_COLOR);
+  Mat image = imread("../imagelib/Template.jpg", IMREAD_COLOR);
 
   Ptr<shapeInfo_producer> sip = makePtr<shapeInfo_producer>(image);
   sip->produce_infos();
@@ -38,11 +38,11 @@ void template_test() {
 int main() {
   // template_test();
 
-  Mat sourceImage = imread("../imagelib/mounts.png", IMREAD_GRAYSCALE);
-  Mat templateImage = imread("../imagelib/mount.png", IMREAD_COLOR);
+  Mat sourceImage = imread("../imagelib/Template.jpg", IMREAD_GRAYSCALE);
+  Mat templateImage = imread("../imagelib/Template.jpg", IMREAD_COLOR);
 
   Template::TemplateParams params;
-  params.num_features = 50;
+  params.num_features = 200;
   params.nms_kernel_size = 3;
   Detector detector;
   detector.match(sourceImage, templateImage, 90, params);
