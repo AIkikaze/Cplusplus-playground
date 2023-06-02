@@ -2,12 +2,14 @@
 #define OPENCV_LINE_2D_HPP
 
 #include <array>
+#include <atomic>
 #include <bitset>
 #include <chrono>
 #include <iostream>
 #include <map>
 #include <opencv2/opencv.hpp>
 #include <random>
+#include <thread>
 #include <vector>
 
 class Timer {
@@ -67,6 +69,7 @@ class shapeInfo_producer {
   struct Info {
     float angle;
     float scale;
+    Info() : angle(0), scale(1) {}
     Info(float input_angle, float input_scale)
         : angle(input_angle), scale(input_scale) {}
   };
@@ -113,12 +116,12 @@ class shapeInfo_producer {
   /// @brief 按日志输出模板图像
   /// @param info 读取日志结构体
   /// @return 返回经过旋转和缩放后的模板图像矩阵
-  cv::Mat src_of(const Info &info);
+  cv::Mat src_of(Info info = shapeInfo_producer::Info());
 
   /// @brief 按日志输出掩图
   /// @param info 读取日志结构体
   /// @return 返回经过旋转和缩放后的掩图矩阵
-  cv::Mat mask_of(const Info &info);
+  cv::Mat mask_of(Info info = shapeInfo_producer::Info());
 
   /// @brief 返回日志列表 Infos 的常量指针, 不可修改列表成员
   /// @return 类中的私有日志列表 Infos
@@ -135,16 +138,17 @@ class shapeInfo_producer {
 };
 
 inline int angle2ori(const float &angle);
+
 inline float ori2angle(const int &orientation);
 
 class Template {
  public:
-  struct Features {
+  struct Feature {
     cv::Point p_xy;   // 特征点坐标
     float angle;      // 特征方向角度 0~360
     float grad_norm;  // 梯度模长(已归一化)
     int orientation;  // 特征方向角量化后的标签 0~15
-    Features(cv::Point xy, float angle, float grad)
+    Feature(cv::Point xy, float angle, float grad)
         : p_xy(xy), angle(angle), grad_norm(grad) {}
     // bool operator<(const Features &rhs) const {  // 按梯度模长进行排序
     //   return grad_norm < rhs.grad_norm;
@@ -203,22 +207,23 @@ class Template {
 
   void scatter(float upper_distance = 6.0f);
 
-  std::vector<Features> relocate_by(shapeInfo_producer::Info info);
+  std::vector<Feature> relocate_by(shapeInfo_producer::Info info);
 
   bool iscreated() { return template_created; }
 
-  const std::vector<Features> &pg_ptr() const { return prograds; };
+  std::vector<Feature> &pg_ptr() { return prograds; };
 
-  void show_in(const cv::Mat &background, cv::Point center);
+  void show_in(cv::Mat &background, cv::Point center,
+               shapeInfo_producer::Info info = shapeInfo_producer::Info());
 
  private:
-  TemplateParams defaultParams;    // 默认参数列表
-  int nms_kernel_size;             // 非极大值抑制的窗口大小
-  float scatter_distance;          // 离散化特征点之间的最小距离
-  float grad_norm;                 // 最小梯度阈值 取值范围 [0, 1.0)
-  size_t num_features;             // 特征方向个数
-  bool template_created;           // 记录模板创建状态
-  std::vector<Features> prograds;  // 特征方向序列
+  TemplateParams defaultParams;   // 默认参数列表
+  int nms_kernel_size;            // 非极大值抑制的窗口大小
+  float scatter_distance;         // 离散化特征点之间的最小距离
+  float grad_norm;                // 最小梯度阈值 取值范围 [0, 1.0)
+  size_t num_features;            // 特征方向个数
+  bool template_created;          // 记录模板创建状态
+  std::vector<Feature> prograds;  // 特征方向序列
 };
 
 class Detector {
@@ -226,8 +231,9 @@ class Detector {
   struct MatchPoint {
     cv::Point p_xy;
     float similarity;
-    MatchPoint(cv::Point p, float similar_score)
-        : p_xy(p), similarity(similar_score) {}
+    shapeInfo_producer::Info info;
+    MatchPoint(cv::Point p, float similar_score, shapeInfo_producer::Info _info)
+        : p_xy(p), similarity(similar_score), info(_info) {}
     bool operator<(const MatchPoint &rhs) const {
       return similarity > rhs.similarity;
     }
@@ -244,7 +250,8 @@ class Detector {
     int linear_size() { return memories[0].size(); }
 
     void create(size_t x, size_t y, float value = 0.0f) {
-      memories = std::vector<std::vector<float>>(x, std::vector<float>(y, value));
+      memories =
+          std::vector<std::vector<float>>(x, std::vector<float>(y, value));
     }
 
     /// @brief memories[i][j] -> linearized Mat S_{orientaion}(c)
@@ -261,9 +268,8 @@ class Detector {
 
   int pyramid_level;
   ImagePyramid src_pyramid;
-  ImagePyramid temp_pyramid;
   std::vector<std::vector<LinearMemories>> memory_pyramid;
-  std::vector<cv::Ptr<Template>> temps;
+  std::vector<cv::Ptr<Template>> template_pyramid;
   std::vector<MatchPoint> match_points;
   static std::vector<float> cos_table;
 
@@ -279,11 +285,18 @@ class Detector {
   static void computeResponseMaps(cv::Mat &spread_ori,
                                   std::vector<cv::Mat> &response_maps);
 
-  static void computeSimilarityMap(std::vector<LinearMemories> &memories,
-                                   Template &temp, LinearMemories &similarity);
+  static void para_computeSimilarityMap(std::vector<LinearMemories> &memories,
+                              const std::vector<Template::Feature> &features,
+                              LinearMemories &similarity, int start, int end);
+
+  static void computeSimilarityMap(
+      std::vector<LinearMemories> &memories,
+      const std::vector<Template::Feature> &features,
+      LinearMemories &similarity);
 
   static void localSimilarityMap(std::vector<LinearMemories> &memories,
-                                 Template &temp, cv::Mat &similarity_map,
+                                 const std::vector<Template::Feature> &features,
+                                 cv::Mat &similarity_map,
                                  std::vector<cv::Rect> &roi_list);
 
   static void linearize(std::vector<cv::Mat> &response_maps,
@@ -301,13 +314,21 @@ class Detector {
                   Template::TemplateParams params = Template::TemplateParams(),
                   cv::Mat mask = cv::Mat());
 
-  void selectMatchPoints(cv::Mat &similarity_map,
-                         std::vector<cv::Rect> &roi_list, int lower_score);
+  void selectMatchPoints(
+      cv::Mat &similarity_map, std::vector<cv::Rect> &roi_list, int lower_score,
+      shapeInfo_producer::Info info = shapeInfo_producer::Info());
 
   void match(const cv::Mat &sourceImage, const cv::Mat &templateImage,
              int lower_score = 90,
              Template::TemplateParams params = Template::TemplateParams(),
              cv::Mat mask_src = cv::Mat(), cv::Mat mask_temp = cv::Mat());
+
+  void match(const cv::Mat &sourceImage, shapeInfo_producer *sip,
+             int lower_score = 90,
+             Template::TemplateParams params = Template::TemplateParams(),
+             cv::Mat mask_src = cv::Mat());
+
+  void draw();
 
  private:
   void init_costable();
