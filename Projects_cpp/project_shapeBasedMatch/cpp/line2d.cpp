@@ -398,7 +398,7 @@ void Template::selectFeatures_from(const cv::Mat &_edges,
   //                    cv::BORDER_CONSTANT, cv::Scalar(0));
   for (int i = 0; i < edges.rows; i++) {
     for (int j = 0; j < edges.cols; j++) {
-      float prevPixel, nextPixel;
+      float prevPixel = 0.0f, nextPixel = 0.0f;
       switch ((int)angles.at<uchar>(i, j)) {
         case 0:
           prevPixel = edges.at<float>(i, j - 1);
@@ -931,13 +931,13 @@ void Detector::setTempate(const cv::Mat &temp_src, int pyramid_level,
   for (int i = 0; i < pyramid_level; i++) {
     cv::Ptr<Template> tp = Template::createPtr_from(temp_pyramid[i], params);
     cv::Mat tempImage = temp_pyramid[i].clone();
-    // tp->show_in(tempImage,
-    //             cv::Point(temp_pyramid[i].cols / 2, temp_pyramid[i].rows /
-    //             2));
-    // cv::namedWindow("tempImage", cv::WINDOW_NORMAL);
-    // cv::imshow("tempImage", tempImage);
-    // cv::waitKey();
-    // cv::destroyWindow("tempImage");
+    tp->show_in(tempImage,
+                cv::Point(temp_pyramid[i].cols / 2, temp_pyramid[i].rows /
+                2));
+    cv::namedWindow("tempImage", cv::WINDOW_NORMAL);
+    cv::imshow("tempImage", tempImage);
+    cv::waitKey();
+    cv::destroyWindow("tempImage");
     if (tp->iscreated())
       template_pyramid.push_back(tp);
     else
@@ -1068,7 +1068,7 @@ void line2d::Detector::match(const cv::Mat &sourceImage,
                              cv::Mat mask_src) {
   int min_CR = min(sourceImage.rows, sourceImage.cols);
   int try_level = 1;
-  while (32 * (1 << try_level) < min_CR) try_level++;
+  while (128 * (1 << try_level) < min_CR) try_level++;
   pyramid_level = try_level;
 
   Timer _time;

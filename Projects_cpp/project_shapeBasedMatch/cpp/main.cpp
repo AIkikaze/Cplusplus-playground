@@ -41,23 +41,24 @@ void template_test() {
 int main() {
   // template_test();
 
-  Mat sourceImage = imread("../imagelib/source_0.bmp", IMREAD_COLOR);
-  Mat templateImage = imread("../imagelib/template_0.bmp", IMREAD_COLOR);
+  Mat sourceImage = imread("../imagelib/source_2.bmp", IMREAD_COLOR);
+  Mat templateImage = imread("../imagelib/template_2.bmp", IMREAD_COLOR);
 
   Ptr<shapeInfo_producer> sip = makePtr<shapeInfo_producer>(templateImage);
   sip->angle_range = { 0 , 360 };
-  sip->angle_step = 2.0;
-  sip->scale_range = { 0.8, 1.2 };
-  sip->scale_step = 0.05;
+  sip->angle_step = 1.0;
+  sip->scale_range = { 0.5, 2.0 };
+  sip->scale_step = 0.1;
   sip->produce_infos();
 
   Template::TemplateParams params;
-  params.num_features = 1000;
-  params.nms_kernel_size = 3;
+  params.num_features = 400;
+  params.nms_kernel_size = 5;
+  params.scatter_distance = 12.0f;
 
   Timer time;
   Detector detector;
-  detector.match(sourceImage, sip, 80, params);
+  detector.match(sourceImage, sip, 90, params);
   time.out("模板匹配运行完毕!");
   cout << "旋转运行时间: " << __time__relocate__ << endl;
 
