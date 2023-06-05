@@ -2,6 +2,7 @@
 using namespace std;
 using namespace line2d;
 double __time__relocate__ = 0.0;
+double __time__produceroi__ = 0.0;
 
 void __onMouse(int event, int x, int y, int flags, void *userdata) {
   if (event == cv::EVENT_LBUTTONDOWN) {
@@ -680,9 +681,9 @@ void Detector::computeResponseMaps(cv::Mat &spread_ori,
   }
 }
 
-void Detector::para_computeSimilarityMap(vector<LinearMemories> &memories,
-                               const vector<Template::Feature> &features,
-                               LinearMemories &similarity, int start, int end) {
+void Detector::para_computeSimilarityMap(
+    vector<LinearMemories> &memories, const vector<Template::Feature> &features,
+    LinearMemories &similarity, int start, int end) {
   // 并行计算
   for (int i = start; i < end; i++) {
     for (const auto &point : features) {
@@ -711,21 +712,20 @@ void Detector::computeSimilarityMap(vector<LinearMemories> &memories,
   similarity.rows = memories[0].rows;
   similarity.cols = memories[0].cols;
 
-  const int numThreads = std::thread::hardware_concurrency();
+  const int numThreads = thread::hardware_concurrency();
   const int workloadPerThread = (16 + numThreads - 1) / numThreads;
 
-  std::vector<std::thread> threads;
-  std::atomic<int> currentRow(0);
+  vector<thread> threads;
+  // atomic<int> currentRow(0);
 
   // 启动多个线程并行计算
   for (int t = 0; t < numThreads; t++) {
     int start = t * workloadPerThread;
     int end = min(start + workloadPerThread, 16);
 
-    threads.emplace_back(
-        [&memories, &features, &similarity, &currentRow, start, end] {
-          para_computeSimilarityMap(memories, features, similarity, start, end);
-        });
+    threads.emplace_back([&memories, &features, &similarity, start, end] {
+      para_computeSimilarityMap(memories, features, similarity, start, end);
+    });
 
     if (end == 16) break;
   }
@@ -840,16 +840,14 @@ void Detector::unlinearize(LinearMemories &similarity,
 
 void Detector::produceRoi(cv::Mat &similarity_map,
                           std::vector<cv::Rect> &roi_list, int lower_score) {
+  Timer time;
   cv::Mat binary_mat;
+  cv::Mat labels, stats, centroids;
+
   cv::threshold(similarity_map, binary_mat, lower_score, 255,
                 cv::THRESH_BINARY);
   if (binary_mat.type() != CV_8U) binary_mat.convertTo(binary_mat, CV_8U);
-  // cv::namedWindow("binaryImage", cv::WINDOW_NORMAL);
-  // cv::imshow("binaryImage", binary_mat);
-  // cv::setMouseCallback("binaryImage", __onMouse, &binary_mat);
-  // cv::waitKey();
 
-  cv::Mat labels, stats, centroids;
   int numLabels =
       cv::connectedComponentsWithStats(binary_mat, labels, stats, centroids);
 
@@ -861,6 +859,7 @@ void Detector::produceRoi(cv::Mat &similarity_map,
                  stats.at<int>(i, cv::CC_STAT_HEIGHT));
     roi_list.push_back(roi);
   }
+  __time__produceroi__ += time.elapsed();
 }
 
 void Detector::setSourceImage(const cv::Mat &src, int pyramid_level,
@@ -1046,13 +1045,6 @@ void Detector::match(const cv::Mat &sourceImage, const cv::Mat &templateImage,
                        template_pyramid[match_level]->pg_ptr(), similarity_map,
                        rois);
 
-    // cv::namedWindow("localsimilarityImage", cv::WINDOW_NORMAL);
-    // cv::normalize(similarity_map, similarityImage, 0, 255, cv::NORM_MINMAX,
-    //               CV_8U);
-    // cv::imshow("localsimilarityImage", similarityImage);
-    // cv::setMouseCallback("localsimilarityImage", __onMouse, &similarity_map);
-    // cv::waitKey();
-
     produceRoi(similarity_map, rois, lower_score);
     __time.out("__局部计算__");
   }
@@ -1082,7 +1074,7 @@ void line2d::Detector::match(const cv::Mat &sourceImage,
 
   match_points.clear();
   _time.out("__初始化完毕!__");
-  
+
   double time1 = 0.0;
   double time2 = 0.0;
 

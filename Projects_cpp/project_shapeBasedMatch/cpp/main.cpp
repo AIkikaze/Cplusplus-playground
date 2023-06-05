@@ -3,6 +3,7 @@ using namespace cv;
 using namespace std;
 using namespace line2d;
 extern double __time__relocate__;
+extern double __time__produceroi__;
 
 void template_test() {
   Mat image = imread("../imagelib/mount.png", IMREAD_COLOR);
@@ -60,7 +61,8 @@ int main() {
   Detector detector;
   detector.match(sourceImage, sip, 90, params);
   time.out("模板匹配运行完毕!");
-  cout << "旋转运行时间: " << __time__relocate__ << endl;
+  cout << "特征点旋转运算时间: " << __time__relocate__ << endl;
+  cout << "联通域分析运算时间: " << __time__produceroi__ << endl;
 
   detector.draw();
 
