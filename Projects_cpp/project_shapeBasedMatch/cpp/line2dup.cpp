@@ -241,9 +241,41 @@ static void quantizeAngle(
   Mat &quantized_angle,
   float threshold) {
   Mat quanized_unfiltered;
-  angle.convertTo(quanized_unfiltered, CV_8U, 16.0 / 360.0);
+  angle.convertTo(quanized_unfiltered, CV_8U, (2 * QUANTIZE_BASE) / 360.0);
 
-  
+  for (int r = 0; r < angle.rows; r++) {
+    for (int l = 0; l < angle.cols; l++) {
+      quanized_unfiltered.at<uchar>(i, j) &= (QUANTIZE_BASE-1);
+    }
+  }
+
+  static int KERNEL_SIZE = 3;
+  static int COUNT_THRESHOLD = (KERNEL_SIZE * KERNEL_SIZE) / 2 + 1;
+  for (int r = 0; r < angle.rows; r++) {
+    for (int l = 0; l < angle.cols; l++) {
+
+      if (magnitude.at<float>(r, l) <= threshold) continue;
+
+      int count[9] = {0};
+      int orientation = 0;
+      int max_count = 0;
+
+      for (int dy = -KERNEL_SIZE/2; dy < KERNEL_SIZE/2 + 1; dy++) {
+        for (int dx = -KERNEL_SIZE/2; dx < KERNEL_SIZE/2 + 1; dx++) {
+          int u = r + dy, v = l + dx;
+          if (u < 0 || v < 0 || u >= angle.rows || v >= angle.cols) continue;
+          uchar &cur = quanized_unfiltered.at<uchar>(u, v);
+          if (++count[(int)cur] > max_count) {
+            max_count = count[cur];
+            orientation = cur;
+          }
+        }
+      }
+
+      if (max_count > COUNT_THRESHOLD)
+        quantized_angle.at<uchar>(r, l) = 1 << orientation;
+    }
+  }
 }
 
 static void sobelMagnitude(
@@ -269,21 +301,21 @@ static void sobelMagnitude(
 
   for (int i = 0; i < size.height; i++) {
     for (int j = 0; j < size.width; j++) {
-      int maxMagnitude = 0;
+      int max_magnitude = 0;
       int index = 0;
       // suitable of 3 or 1 channel img
       for (int c = 0; c < smoothed.channels(); c++) {
         short &dx = sobel_3dx.at<Vec3s>(i, j)[c];
         short &dy = sobel_3dy.at<Vec3s>(i, j)[c];
         int mag_c = dx * dx + dy * dy;
-        if (mag_c > maxMagnitude) {
-          maxMagnitude = mag_c;
+        if (mag_c > max_magnitude) {
+          max_magnitude = mag_c;
           index = c;
         }
       }
       sobel_dx.at<float>(i, j) = sobel_3dx.at<Vec3s>(i, j)[index];
       sobel_dy.at<float>(i, j) = sobel_3dy.at<Vec3s>(i, j)[index];
-      magnitude.at<float>(i, j) = maxMagnitude;
+      magnitude.at<float>(i, j) = max_magnitude;
     }
   }
 

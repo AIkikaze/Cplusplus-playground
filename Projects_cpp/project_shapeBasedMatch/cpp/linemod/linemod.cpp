@@ -353,6 +353,15 @@ void hysteresisGradient(Mat& magnitude, Mat& quantized_angle,
     uchar* quant_r = quantized_unfiltered.ptr<uchar>(r);
     for (int c = 1; c < angle.cols - 1; ++c)
     {
+      // 7:  00000111
+      // 15: 00001111 -> 7
+      // 14: 00001110 -> 110 -> 6
+      // 13: 00001101 -> 101 -> 5
+      // 12: 00001100 -> 100 -> 4
+      // 11: 00001011 -> 011 -> 3
+      // 10: 00001010 -> 010 -> 2
+      // 9:  00001001 -> 001 -> 1
+      // 8:  00001000 -> 000 -> 0
       quant_r[c] &= 7;
     }
   }
