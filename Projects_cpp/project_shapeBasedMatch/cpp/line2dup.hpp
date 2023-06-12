@@ -5,12 +5,18 @@
 #include <map>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
-#include <opencv2/rgbd/linemod.hpp>
 #include <vector>
 
 namespace line2Dup {
 
 #define QUANTIZE_BASE 16
+
+#if QUANTIZE_BASE == 16
+#define QUANTIZE_TYPE CV_16U
+typedef ushort quantize_type;
+#elif QUNATIZE_BASE == 8
+#define QUANTIZE_TYPE CV_8U
+#endif
 
 struct Feature {
   int x;
@@ -35,6 +41,8 @@ struct Template {
 
   void read(const cv::FileNode &fn);
   void write(cv::FileStorage &fs) const;
+
+  cv::Rect cropTemplate(std::vector<Template> &templs);
 };
 
 class QuantizedPyramid {
@@ -91,9 +99,7 @@ public:
   ColorGradient();
 
   ColorGradient(float weak_threshold, float strong_threshold,
-                size_t num_features)
-      : weak_threshold(weak_threshold), strong_threshold(strong_threshold),
-        num_features(num_features) {}
+                size_t num_features);
 
   static cv::Ptr<ColorGradient>
   create(float weak_threshold, float strong_threshold, size_t num_features);
@@ -109,8 +115,7 @@ private:
   size_t num_features;
 
 protected:
-  virtual cv::Ptr<QuantizedPyramid>
-  processTempl(const cv::Mat &srt, const cv::Mat &mask) const override;
+  virtual cv::Ptr<QuantizedPyramid> processTempl(const cv::Mat &src, const cv::Mat &mask) const override;
 };
 
 
@@ -119,6 +124,31 @@ void colormap(const cv::Mat &quantized, cv::Mat &dst);
 
 void drawFeatures(cv::InputOutputArray img, const std::vector<Template> &templates, const cv::Point2i &_p_, int size = 10);
 
+class ColorGradientPyramid : public QuantizedPyramid {
+public:
+  ColorGradientPyramid(const cv::Mat &_src, const cv::Mat &_mask, float _weak_threshold,
+                       float _strong_threshold, size_t _num_features);
+
+  virtual void quantize(cv::Mat &dst) const override;
+
+  virtual bool extractTemplate(Template &templ) const override;
+
+  virtual void pyrDown() override;
+
+protected:
+  void update();
+
+  int pyramid_level;
+  cv::Mat src;
+  cv::Mat mask;
+
+  cv::Mat magnitude;
+  cv::Mat angle;
+
+  float weak_threshold;
+  float strong_threshold;
+  size_t num_features;
+};
 } // namespace line2Dup
 
 #endif // LINE2D_UP_HPP
