@@ -1069,7 +1069,9 @@ static void computeResponseMaps(const Mat& src, std::vector<Mat>& response_maps)
       uchar* map_data = response_maps[ori].ptr<uchar>();
       uchar* lsb4_data = lsb4.ptr<uchar>();
       uchar* msb4_data = msb4.ptr<uchar>();
+      // lut[32 * ori]
       const uchar* lut_low = SIMILARITY_LUT + 32*ori;
+      // lut[32 * ori + 16]
       const uchar* lut_hi = lut_low + 16;
 
       for (int i = 0; i < src.rows * src.cols; ++i)
