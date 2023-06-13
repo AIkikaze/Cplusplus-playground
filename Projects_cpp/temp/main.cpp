@@ -66,29 +66,7 @@ void PrintOpenCVInfo() {
 #endif
 }
 
-void MIPP_test() {
-  cout << "MIPP tests" << endl;
-  cout << "----------" << endl << endl;
 
-  cout << "Instr. type:       " << mipp::InstructionType << endl;
-  cout << "Instr. full type:  " << mipp::InstructionFullType << endl;
-  cout << "Instr. version:    " << mipp::InstructionVersion << endl;
-  cout << "Instr. size:       " << mipp::RegisterSizeBit << " bits" << endl;
-  cout << "Instr. lanes:      " << mipp::Lanes << endl;
-  cout << "64-bit support:    " << (mipp::Support64Bit ? "yes" : "no") << endl;
-  cout << "Byte/word support: " << (mipp::SupportByteWord ? "yes" : "no")
-       << endl;
-
-#ifndef has_max_int8_t
-  cout << "in this SIMD, int8 max is not inplemented by MIPP" << endl;
-#endif
-
-#ifndef has_shuff_int8_t
-  cout << "in this SIMD, int8 shuff is not inplemented by MIPP" << endl;
-#endif
-
-  cout << "----------" << endl << endl;
-}
 
 inline int angle2label(const float &alpha) {
   int quantized_alpha = int(alpha * (2 * QUANTIZE_BASE) / 360.0);
