@@ -1,5 +1,4 @@
 #include "line2dup.hpp"
-#include "shapeInfo.hpp"
 using namespace std;
 using namespace cv;
 
@@ -91,13 +90,15 @@ int main() {
   extract_timer.stop();
   if (template_id != -1) {
     printf("*** Added template (id %d) for new object class %d ***\n", template_id, num_classes);
+    printf("-> time consum : %f s\n", extract_timer.time());
   }
   
+  Point p1(bb.x, bb.y);
   Point p2(bb.x + bb.width, bb.y + bb.height);
   rectangle(display, p1, p2, Scalar(0, 0, 0), 3);
   rectangle(display, p1, p2, Scalar(0, 255, 0), 1);
   line2Dup::drawFeatures(display, detector->getTemplates(class_id, template_id), p1, 3);
-  Rect roi(bb.x - 5, bb.y - 5, bb.width + 15, bb.height + 15);
+  Rect roi(bb.x - 5, bb.y - 5, bb.width + 10, bb.height + 10);
   display = display(roi);
 
   imshow("template", display);

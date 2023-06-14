@@ -5,6 +5,9 @@
 
 namespace line2Dup {
 
+#define line2d_eps 1e-7f
+#define _degree_(x) ((x)*CV_PI) / 180.0
+
 #define QUANTIZE_BASE 16
 
 #if QUANTIZE_BASE == 16
@@ -14,158 +17,134 @@ typedef ushort quantize_type;
 #define QUANTIZE_TYPE CV_8U
 #endif
 
-/// @brief 特征点结构体
+// Feature -> Gradient -> Candidate
+
 struct Feature {
   int x;
   int y;
   int label;
-  float alpha;
-
-  Feature() : x(0), y(0), label(0), alpha(0.0f) {}
   Feature(int _x, int _y, int _label) : x(_x), y(_y), label(_label) {}
 
   void read(const cv::FileNode &fn);
   void write(cv::FileStorage &fs) const;
 };
 
-/// @brief 模型结构体
-struct Template {
-  int width;                     // 重新裁剪后的宽度
-  int height;                    // 重新裁剪后的高度
-  int _x_;                       // 定位点横坐标
-  int _y_;                       // 定位点纵座标
-  int pyramid_level;             // 金字塔层级
-  std::vector<Feature> features; // 特征点序列
+#define angle2label(x) (static_cast<int>(x * 32.0 / 360.0) & 15)
 
+struct Gradient : Feature {
+  float angle;
+  Gradient(int _x, int _y, float _angle)
+      : Feature(_x, _y, angle2label(_angle)), angle(_angle) {}
+};
+
+/// @brief 待筛选的特征结构体
+struct Candidate : Feature {
+  float score;
+  Candidate(int _x, int _y, int _label, float _score)
+      : Feature(_x, _y, _label), score(_score) {}
+
+  bool operator<(const Candidate &rhs) const { return score > rhs.score; }
+};
+
+// Template -> ShapeTemplate
+
+struct Template {
+  cv::RotatedRect box;
+  int pyramid_level;
+  std::vector<Feature> features;
+
+  // 数据存储与读取
   void read(const cv::FileNode &fn);
   void write(cv::FileStorage &fs) const;
-
-  cv::Rect cropTemplate(std::vector<Template> &templs);
 };
 
-/// @brief 量化金字塔
-class QuantizedPyramid {
+class ShapeTemplate {
 public:
-  virtual ~QuantizedPyramid() {}
+  cv::RotatedRect box;
+  int pyramid_level;
+  std::vector<Gradient> features;
+  float scale;
+  float angle;
 
-  /// @brief 从梯度矩阵中得出量化方向
-  virtual void quantize(cv::Mat &dst) const = 0;
+  ShapeTemplate() : scale(1.0f), angle(0.0f), lazy(true) {}
+  ShapeTemplate(float _alpha, float _theta, bool _lazy)
+      : scale(_alpha), angle(_theta), lazy(_lazy) {}
 
-  /// @brief 从模板中提出特征点序列
-  virtual bool extractTemplate(Template &templ) const = 0;
+  // 加载旋转缩放
+  static void relocate(ShapeTemplate &templ);
 
-  /// @brief 金字塔下采样
-  virtual void pyrDown() = 0;
-
-protected:
-  /// @brief 待筛选的特征结构体
-  struct Candidate {
-    Feature f;
-    float score;
-
-    Candidate(int _x, int _y, int _label, float _score)
-        : f(_x, _y, _label), score(_score) {}
-
-    bool operator<(const Candidate &rhs) const { return score > rhs.score; }
-  };
-
-  /// @brief 离散化特征
-  /// @param[in] candidates 待筛选的结构体
-  /// @param[out] features 筛选后的结构体
-  /// @param[in] num_features 必须达到的特征点个数
-  /// @param[in] distance 离散化的点间距
-  static void selectScatteredFeatures(const std::vector<Candidate> &candidates,
-                                      std::vector<Feature> &features,
-                                      size_t num_features, float distance);
-};
-
-/// @brief 模型类
-class Modality {
-public:
-  virtual ~Modality() {}
-
-  /// @brief 模型初始化接口，从源图像和遮罩中创建量化金字塔的类对象，并用指针
-  /// Ptr 管理
-  /// @param[in] src 源图像
-  /// @param[in] mask 遮罩
-  cv::Ptr<QuantizedPyramid> process(const cv::Mat &src,
-                                    const cv::Mat &mask = cv::Mat()) {
-    return processTempl(src, mask);
+  // 懒加载
+  inline void process() {
+    if (lazy)
+      relocate(*this);
   }
 
-  virtual cv::String name() const = 0;
-
-  virtual void read(const cv::FileNode &fn) = 0;
-  virtual void write(cv::FileStorage &fs) const = 0;
-
-  static cv::Ptr<Modality> create(const cv::String &modality_type);
-
-  static cv::Ptr<Modality> create(const cv::FileNode &fn);
-
-protected:
-  virtual cv::Ptr<QuantizedPyramid> processTempl(const cv::Mat &src,
-                                                 const cv::Mat &mask) const = 0;
-};
-
-/// @brief 色彩梯度
-class ColorGradient : public Modality {
-public:
-  ColorGradient();
-
-  ColorGradient(float weak_threshold, float strong_threshold,
-                size_t num_features);
-
-  static cv::Ptr<ColorGradient>
-  create(float weak_threshold, float strong_threshold, size_t num_features);
-
-  virtual cv::String name() const override;
-
-  virtual void read(const cv::FileNode &fn) override;
-  virtual void write(cv::FileStorage &fs) const override;
+  // 类型转化
+  operator Template() const;
 
 private:
-  float weak_threshold;
-  float strong_threshold;
-  size_t num_features;
-
-protected:
-  virtual cv::Ptr<QuantizedPyramid>
-  processTempl(const cv::Mat &src, const cv::Mat &mask) const override;
+  bool lazy; // 1 -> 未进行缩放旋转; 0 -> 已进行缩放旋转
 };
 
-/// Debug
-void colormap(const cv::Mat &quantized, cv::Mat &dst);
+/// ColorGradientPyramid
 
-void drawFeatures(cv::InputOutputArray img,
-                  const std::vector<Template> &templates,
-                  const cv::Point2i &_p_, int size = 10);
-
-/// @brief 色彩梯度金字塔
-class ColorGradientPyramid : public QuantizedPyramid {
+/// @brief 1. 计算梯度方向的量化矩阵 2. 将提取模型
+class ColorGradientPyramid {
 public:
-  ColorGradientPyramid(const cv::Mat &_src, const cv::Mat &_mask,
-                       float _weak_threshold, float _strong_threshold,
-                       size_t _num_features);
+  ColorGradientPyramid(const cv::Mat &_src, 
+                       const cv::Mat &_mask,
+                       float _magnitude_threshold = 80.0f, 
+                       int count_kernel_size = 5,
+                       size_t _num_features = 100);
 
-  virtual void quantize(cv::Mat &dst) const override;
+  cv::Ptr<ColorGradientPyramid> process(const cv::Mat src,
+                                        const cv::Mat &mask = cv::Mat()) const {
+    return cv::makePtr<ColorGradientPyramid>(src, mask, magnitude_threshold,
+                                             count_kernel_size, num_features);
+  }
 
-  virtual bool extractTemplate(Template &templ) const override;
+  cv::Mat quantized_angle() const {
+    cv::Mat quantized_angle;
+    angle.copyTo(quantized_angle, mask);
+    return quantized_angle;
+  }
 
-  virtual void pyrDown() override;
+  bool extractTemplate(Template &templ) const;
 
-protected:
-  void update();
+  void pyrDown();
+
+private:
+  inline void update();
 
   int pyramid_level;
+
   cv::Mat src;
   cv::Mat mask;
 
   cv::Mat magnitude;
   cv::Mat angle;
 
-  float weak_threshold;
-  float strong_threshold;
+  float magnitude_threshold;
+  int count_kernel_size;
   size_t num_features;
+};
+
+/// Search
+
+struct Range {
+  float lower_bound;
+  float upper_bound;
+  float step;
+  Range(float l, float u, float s) : lower_bound(l), upper_bound(u), step(s) {}
+  Range(float range_params[3])
+      : lower_bound(range_params[0]), upper_bound(range_params[1]),
+        step(range_params[2]) {}
+};
+
+struct Search {
+  Range scale;
+  Range angle;
+  Search(Range _scale, Range _angle) : scale(_scale), angle(_angle) {}
 };
 
 /// Match and Detector
@@ -176,7 +155,6 @@ struct Match {
   float similarity;
   cv::String class_id;
   int template_id;
-
   Match(int _x, int _y, float _similarity, const cv::String &_class_id,
         int _template_id)
       : x(_x), y(_y), similarity(_similarity), class_id(_class_id),
@@ -195,77 +173,58 @@ struct Match {
   }
 };
 
-class Detector {
+class LinearMemory {
 public:
-  Detector();
-
-  Detector(const std::vector<cv::Ptr<Modality>> &modalities,
-           const std::vector<int> &temp_pyramid);
-
-  void
-  match(const std::vector<cv::Mat> &sources, float threshold,
-        std::vector<Match> &matches,
-        const std::vector<cv::String> &class_ids = std::vector<cv::String>(),
-        cv::OutputArrayOfArrays quantized_images = cv::noArray(),
-        const std::vector<cv::Mat> &masks = std::vector<cv::Mat>()) const;
-
-  int addTemplate(const std::vector<cv::Mat> &sources,
-                  const cv::String &class_id, const cv::Mat &object_mask,
-                  cv::Rect *bounding_box = NULL);
-
-  int addSynthicTemplate(const std::vector<Template> &templates,
-                         const cv::String &class_id);
-
-  const std::vector<cv::Ptr<Modality>> &getModalities() const {
-    return modalities;
+  LinearMemory(int _block_size, cv::Size size)
+    : block_size(_block_size), rows(size.height), cols(size.width) { 
+    memories = std::vector<std::vector<ushort>>(block_size * block_size, std::vector<ushort>(cols * rows, 0));
   }
+  
+  void linearize(cv::Mat &src);
 
-  int getT(int pyramid_level) const { return T_at_level[pyramid_level]; }
+  void unlinearize(cv::Mat &dst);
 
-  int pyramidLevels() const { return pyramid_levels; }
-
-  const std::vector<Template> &getTemplates(const cv::String &class_id,
-                                            int template_id) const;
-
-  int numTemplates() const;
-  int numTemplates(const cv::String &class_id) const;
-  int numClasses() const { return static_cast<int>(class_templates.size()); }
-
-  std::vector<cv::String> classIds() const;
-
-  void read(const cv::FileNode &fn);
+  void read(cv::FileNode &fn);
   void write(cv::FileStorage &fs) const;
 
-  cv::String readClass(const cv::FileNode &fn,
-                       const cv::String &class_id_override = "");
-  void writeClass(const cv::String &class_id, cv::FileStorage &fs) const;
-  void readClass(const std::vector<cv::String> &class_ids,
-                 const cv::String &format = "templates_%s.yml.gz");
-  void writeClass(const cv::String &format = "templates_%s.yml.gz") const;
-
-protected:
-  std::vector<cv::Ptr<Modality>> modalities; // 待匹配的模型列表
-  int pyramid_levels;                        // 金字塔层数
-  std::vector<int> T_at_level;               // 各层使用的响应核大小
-
-  typedef std::vector<Template>
-      TemplatePyramid;                       // 定义：模板金字塔 -> 用于储存各层各参数的模板 
-                                             // tp[i * num_modalities + j] -> 第 i 层中第 j 个模板
-  typedef std::map<cv::String, std::vector<TemplatePyramid>>
-      TemplateMap;                           // 定义：模板映射 -> 用于查找模板
-  TemplateMap class_templates;
-
-  typedef std::vector<cv::Mat> LinearMemories;
-  typedef std::vector<std::vector<LinearMemories>> LinearMemoryPyramid;
-
-  void matchClass(const LinearMemoryPyramid &lm_pyramid,
-                  const std::vector<cv::Size> &sizes, float threshold,
-                  std::vector<Match> &matches, const cv::String &class_id,
-                  const std::vector<TemplatePyramid> &template_pyramids) const;
+private:
+  std::vector<std::vector<ushort>> memories;
+  int block_size;
+  int rows;
+  int cols;
 };
 
-cv::Ptr<Detector> getDefaultLINE();
+class Detector {
+public:
+  // src & mask -> response map
+  void setSource(cv::Mat &src, cv::Mat mask = cv::Mat());
 
+  // src & mask -> shapetemplate
+  void setTemplate(cv::Mat &object, cv::Mat object_mask = cv::Mat());
+
+  void addSource(cv::Mat &src, cv::Mat mask = cv::Mat(), const cv::String &src_name = "default");
+
+  void addTemplate(cv::Mat &object, cv::Mat object_mask = cv::Mat(), const cv::String &templ_name = "default");
+
+  void addSearch(Range &scale, Range &angle);
+
+  void match(cv::Mat &src, cv::Mat &object, 
+             float score_threshold,
+             cv::Mat src_mask = cv::Mat(), 
+             cv::Mat object_mask = cv::Mat());
+
+  void match(cv::String &match_name, cv::String &search_name);
+
+private:
+  cv::Ptr<ColorGradientPyramid> modality;
+  std::map<cv::String, std::vector<ShapeTemplate> > templates_map;
+  std::map<cv::String, std::vector<LinearMemory> > memories_map;
+  std::map<cv::String, std::vector<Search> > searches_map;
+
+  int pyramid_level;
+  std::list<int> spread_kernel_size;
+  std::list<int> gaussian_kernel_size;
+};
 } // namespace line2Dup
 
 #endif // LINE2D_UP_HPP

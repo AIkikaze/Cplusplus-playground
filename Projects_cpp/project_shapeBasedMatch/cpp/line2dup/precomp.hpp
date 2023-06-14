@@ -6,7 +6,7 @@
 
 #include <iostream>
 #include <vector>
-#include <array>
+#include <list>
 #include <set>
 #include <map>
 
