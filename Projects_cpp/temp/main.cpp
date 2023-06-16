@@ -1,4 +1,3 @@
-#include "MIPP/mipp.h"
 #include "header.hpp"
 #include <bitset>
 #include <iostream>
