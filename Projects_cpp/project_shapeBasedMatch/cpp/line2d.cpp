@@ -1,13 +1,12 @@
 #include "line2d.hpp"
-using namespace cv;
 using namespace std;
 using namespace line2d;
 double __time__relocate__ = 0.0;
 double __time__produceroi__ = 0.0;
 
 void __onMouse(int event, int x, int y, int flags, void *userdata) {
-  if (event == EVENT_LBUTTONDOWN) {
-    Mat *image = static_cast<Mat *>(userdata);
+  if (event == cv::EVENT_LBUTTONDOWN) {
+    cv::Mat *image = static_cast<cv::Mat *>(userdata);
     if (image != nullptr && !image->empty()) {
       if (x >= 0 && x < image->cols && y >= 0 && y < image->rows) {
         auto pixel = image->at<float>(y, x);
@@ -22,36 +21,36 @@ vector<float> Detector::cos_table;
 
 ImagePyramid::ImagePyramid() {
   pyramid_level = 0;
-  pyramid = vector<Mat>();
+  pyramid = vector<cv::Mat>();
 }
 
-ImagePyramid::ImagePyramid(const Mat &src, int py_level) {
+ImagePyramid::ImagePyramid(const cv::Mat &src, int py_level) {
   buildPyramid(src, py_level);
 }
 
-Mat &ImagePyramid::operator[](int index) {
+cv::Mat &ImagePyramid::operator[](int index) {
   CV_Assert(index >= 0 && index < pyramid_level);
   return pyramid[index];
 }
 
-void ImagePyramid::buildPyramid(const Mat &src, int py_level) {
+void ImagePyramid::buildPyramid(const cv::Mat &src, int py_level) {
   pyramid_level = py_level;
-  Mat curImg = src.clone();
+  cv::Mat curImg = src.clone();
 
   // 裁剪图像到合适尺寸
   int suit_size =
-      (1 << pyramid_level) * 4;  // 4: 使得最高层图像长宽为 4 的倍数便于线性化
+      (1 << pyramid_level) * 4; // 4: 使得最高层图像长宽为 4 的倍数便于线性化
   int n_rows = (curImg.rows / suit_size + 1) * suit_size;
   int n_cols = (curImg.cols / suit_size + 1) * suit_size;
-  copyMakeBorder(curImg, curImg, 0, n_rows - curImg.rows, 0,
-                     n_cols - curImg.cols, BORDER_REPLICATE);
+  cv::copyMakeBorder(curImg, curImg, 0, n_rows - curImg.rows, 0,
+                     n_cols - curImg.cols, cv::BORDER_REPLICATE);
 
   // 初始化图像金字塔
   pyramid.push_back(curImg);
 
   // 构建图像金字塔
   for (int i = 0; i < pyramid_level - 1; i++) {
-    Mat downsampledImg;
+    cv::Mat downsampledImg;
     pyrDown(pyramid[i], downsampledImg);
     pyramid.push_back(downsampledImg);
   }
@@ -65,8 +64,8 @@ shapeInfo_producer::shapeInfo_producer() {
   eps = line2d_eps;
 }
 
-shapeInfo_producer::shapeInfo_producer(const Mat &input_src,
-                                       Mat input_mask, bool padding)
+shapeInfo_producer::shapeInfo_producer(const cv::Mat &input_src,
+                                       cv::Mat input_mask, bool padding)
     : shapeInfo_producer() {
   CV_Assert(!input_src.empty());
   CV_Assert(input_mask.empty() || (input_src.size() == input_mask.size()));
@@ -75,32 +74,31 @@ shapeInfo_producer::shapeInfo_producer(const Mat &input_src,
   if (padding) {
     src = input_src;
     if (input_mask.empty())
-      mask = Mat(src.size(), CV_8U, Scalar(255));
+      mask = cv::Mat(input_src.size(), CV_8U, cv::Scalar(255));
     else
       mask = input_mask;
-  } else {  // 当前图像未扩充 0 边界
+  } else { // 当前图像未扩充 0 边界
     // 图像在旋转和缩放过程中有效像素到图像中心的最远距离
     int border_max = 1 + (int)sqrt(input_src.rows * input_src.rows +
                                    input_src.cols * input_src.cols);
+    if (input_mask.empty())
+      input_mask = cv::Mat(input_src.size(), CV_8U, cv::Scalar(255));
+
+    cv::copyMakeBorder(input_mask, mask, border_max - input_mask.rows / 2,
+                       border_max - input_mask.rows / 2,
+                       border_max - input_mask.cols / 2,
+                       border_max - input_mask.cols / 2, cv::BORDER_CONSTANT);
     // 扩充边界
-    copyMakeBorder(input_src, src, border_max - input_src.rows / 2,
+    cv::copyMakeBorder(input_src, src, border_max - input_src.rows / 2,
                        border_max - input_src.rows / 2,
                        border_max - input_src.cols / 2,
-                       border_max - input_src.cols / 2, BORDER_REPLICATE);
-
-    if (input_mask.empty())
-      mask = Mat(src.size(), CV_8U, Scalar(255));
-    else  // 扩充掩图边界
-      copyMakeBorder(input_mask, mask, border_max - input_mask.rows / 2,
-                         border_max - input_mask.rows / 2,
-                         border_max - input_mask.cols / 2,
-                         border_max - input_mask.cols / 2, BORDER_CONSTANT);
+                       border_max - input_src.cols / 2, cv::BORDER_REPLICATE);
   }
 }
 
 void shapeInfo_producer::save_config(const shapeInfo_producer &sip,
                                      string path) {
-  FileStorage fs(path, FileStorage::WRITE);
+  cv::FileStorage fs(path, cv::FileStorage::WRITE);
 
   // 储存公有成员参数
   fs << "params"
@@ -128,16 +126,17 @@ void shapeInfo_producer::save_config(const shapeInfo_producer &sip,
   fs.release();
 }
 
-Ptr<shapeInfo_producer> shapeInfo_producer::load_config(
-    const Mat &input_src, Mat input_mask, bool padding, string path) {
-  FileStorage fs(path, FileStorage::READ);
+cv::Ptr<shapeInfo_producer>
+shapeInfo_producer::load_config(const cv::Mat &input_src, cv::Mat input_mask,
+                                bool padding, string path) {
+  cv::FileStorage fs(path, cv::FileStorage::READ);
 
   // 用 Ptr 管理并初始化 shapeInfo_producer 对象
-  Ptr<shapeInfo_producer> sip =
-      makePtr<shapeInfo_producer>(input_src, input_mask, padding);
+  cv::Ptr<shapeInfo_producer> sip =
+      cv::makePtr<shapeInfo_producer>(input_src, input_mask, padding);
 
   // 读取公有成员参数
-  FileNode paramsNode = fs["params"];
+  cv::FileNode paramsNode = fs["params"];
   sip->angle_range[0] = (float)paramsNode["angle_range"][0];
   sip->angle_range[1] = (float)paramsNode["angle_range"][1];
   sip->scale_range[0] = (float)paramsNode["scale_range"][0];
@@ -158,11 +157,14 @@ Ptr<shapeInfo_producer> shapeInfo_producer::load_config(
 }
 
 void shapeInfo_producer::produce_infos() {
-  if (!Infos.empty()) Infos.clear();
+  if (!Infos.empty())
+    Infos.clear();
   CV_Assert(scale_range[0] < scale_range[1] + eps);
   CV_Assert(angle_range[0] < angle_range[1] + eps);
-  if (scale_step < eps) scale_step = 2 * eps;
-  if (angle_step < eps) angle_step = 2 * eps;
+  if (scale_step < eps)
+    scale_step = 2 * eps;
+  if (angle_step < eps)
+    angle_step = 2 * eps;
   for (float scale = scale_range[0]; scale <= scale_range[1] + eps;
        scale += scale_step)
     for (float angle = angle_range[0]; angle <= angle_range[1] + eps;
@@ -171,26 +173,26 @@ void shapeInfo_producer::produce_infos() {
     }
 }
 
-Mat shapeInfo_producer::affineTrans(const Mat &src, float angle,
+cv::Mat shapeInfo_producer::affineTrans(const cv::Mat &src, float angle,
                                         float scale) {
-  Mat dst;
-  Point2f center(cvFloor(src.cols / 2.0f), cvFloor(src.rows / 2.0f));
-  Mat rotate_mat = getRotationMatrix2D(center, angle, scale);
-  warpAffine(src, dst, rotate_mat, src.size(), INTER_LINEAR,
-                 BORDER_REPLICATE);
+  cv::Mat dst;
+  cv::Point2f center(cvFloor(src.cols / 2.0f), cvFloor(src.rows / 2.0f));
+  cv::Mat rotate_mat = cv::getRotationMatrix2D(center, angle, scale);
+  cv::warpAffine(src, dst, rotate_mat, src.size(), cv::INTER_LINEAR,
+                 cv::BORDER_REPLICATE);
   return dst;
 }
 
-Mat shapeInfo_producer::src_of(Info info) {
+cv::Mat shapeInfo_producer::src_of(Info info) {
   return affineTrans(src, info.angle, info.scale);
 }
 
-Mat shapeInfo_producer::mask_of(Info info) {
+cv::Mat shapeInfo_producer::mask_of(Info info) {
   return affineTrans(mask, info.angle, info.scale);
 }
 
-const vector<shapeInfo_producer::Info> &shapeInfo_producer::Infos_constptr()
-    const {
+const vector<shapeInfo_producer::Info> &
+shapeInfo_producer::Infos_constptr() const {
   return Infos;
 }
 
@@ -210,190 +212,262 @@ float line2d::ori2angle(const int &orientation) {
   return 5.625f + 11.25f * orientation;
 }
 
-/// Template
-
 Template::Template() {
   nms_kernel_size = defaultParams.nms_kernel_size;
-  magnitude_threshold = defaultParams.magnitude_threshold;
+  scatter_distance = defaultParams.scatter_distance;
+  grad_norm = defaultParams.grad_norm;
   num_features = defaultParams.num_features;
   template_created = defaultParams.template_created;
 }
 
 Template::Template(TemplateParams params, bool isDefault) {
   nms_kernel_size = params.nms_kernel_size;
-  magnitude_threshold = params.magnitude_threshold;
+  scatter_distance = params.scatter_distance;
+  grad_norm = params.grad_norm;
   num_features = params.num_features;
   template_created = params.template_created;
-  if (isDefault) defaultParams = params;
+  if (isDefault)
+    defaultParams = params;
 }
 
-static void sobelMagnitude(const Mat &src, Mat &magnitude, Mat &sobel_dx,
-                           Mat &sobel_dy) {
+void Template::getOriMat(const cv::Mat &src, cv::Mat &edges, cv::Mat &angles) {
+  CV_Assert(!src.empty());
+  CV_Assert(src.channels() == 1 || src.channels() == 3);
+
   // Allocate temporary buffers
-  Size size = src.size();
-  Mat sobel_3dx;
-  Mat sobel_3dy;
-  Mat smoothed;
+  cv::Size size = src.size();
+  cv::Mat sobel_3dx, sobel_dx;
+  cv::Mat sobel_3dy, sobel_dy;
+  cv::Mat smoothed;
   // Initialize in/out params
   sobel_dx.create(size, CV_32F);
   sobel_dy.create(size, CV_32F);
-  magnitude.create(size, CV_32F);
+  edges.create(size, CV_32F);
 
-  // Calculate the magnitude matrix of 3/1 channel img
-  static const int KERNEL_SIZE = 7;
-  GaussianBlur(src, smoothed, Size(KERNEL_SIZE, KERNEL_SIZE), 0, 0,
-               BORDER_REPLICATE);
-  Sobel(smoothed, sobel_3dx, CV_16S, 1, 0, 3, 1.0, 0, BORDER_REPLICATE);
-  Sobel(smoothed, sobel_3dy, CV_16S, 0, 1, 3, 1.0, 0, BORDER_REPLICATE);
+  // Calculate the edges matrix of 3/1 channel img
+  static const int KERNEL_SIZE = 3;
+  GaussianBlur(src, smoothed, cv::Size(KERNEL_SIZE, KERNEL_SIZE), 0, 0,
+               cv::BORDER_REPLICATE);
+  Sobel(smoothed, sobel_3dx, CV_16S, 1, 0, 3, 1.0, 0, cv::BORDER_REPLICATE);
+  Sobel(smoothed, sobel_3dy, CV_16S, 0, 1, 3, 1.0, 0, cv::BORDER_REPLICATE);
 
-  for (int i = 0; i < size.height; i++) {
-    for (int j = 0; j < size.width; j++) {
-      int maxMagnitude = 0;
-      int index = 0;
-      // suitable of 3 or 1 channel img
-      for (int c = 0; c < smoothed.channels(); c++) {
-        short &dx = sobel_3dx.at<Vec3s>(i, j)[c];
-        short &dy = sobel_3dy.at<Vec3s>(i, j)[c];
-        int mag_c = dx * dx + dy * dy;
-        if (mag_c > maxMagnitude) {
-          maxMagnitude = mag_c;
-          index = c;
+  if (smoothed.channels() == 1) {
+    for (int i = 0; i < size.height; i++) {
+      for (int j = 0; j < size.width; j++) {
+        sobel_dx.at<float>(i, j) = sobel_3dx.at<ushort>(i, j);
+        sobel_dy.at<float>(i, j) = sobel_3dy.at<ushort>(i, j);
+      }
+    }
+    magnitude(sobel_dx, sobel_dy, edges);
+  } else {
+    for (int i = 0; i < size.height; i++) {
+      for (int j = 0; j < size.width; j++) {
+        int maxedges = 0;
+        int index = 0;
+        // suitable of 3 or 1 channel img
+        for (int c = 0; c < smoothed.channels(); c++) {
+          short &dx = sobel_3dx.at<cv::Vec3s>(i, j)[c];
+          short &dy = sobel_3dy.at<cv::Vec3s>(i, j)[c];
+          int mag_c = dx * dx + dy * dy;
+          if (mag_c > maxedges) {
+            maxedges = mag_c;
+            index = c;
+          }
         }
-      }
-      sobel_dx.at<float>(i, j) = sobel_3dx.at<Vec3s>(i, j)[index];
-      sobel_dy.at<float>(i, j) = sobel_3dy.at<Vec3s>(i, j)[index];
-      magnitude.at<float>(i, j) = maxMagnitude;
-    }
-  }
-  normalize(magnitude, magnitude, 0, 100.0f, NORM_MINMAX, CV_32F);
-}
-
-
-bool Template::createTemplate(const Mat &src, Template &tp,
-                              int nms_kernel_size) {
-  Mat magnitude, sobel_dx, sobel_dy;
-  sobelMagnitude(src, magnitude, sobel_dx, sobel_dy);
-
-  Mat sobel_ag;
-  phase(sobel_dx, sobel_dy, sobel_ag, true);
-
-  vector<Feature> candidates;
-  for (int r = 0; r < magnitude.rows; r++) {
-    for (int l = 0; l < magnitude.cols; l++) {
-      const float &angle_at_rl = sobel_ag.at<ushort>(r, l);
-      const float &magnitude_at_rl = magnitude.at<float>(r, l);
-      if (angle_at_rl > 0 && magnitude_at_rl > tp.magnitude_threshold) {
-        candidates.push_back(
-            Feature(l, r, angle_at_rl, magnitude_at_rl));
+        sobel_dx.at<float>(i, j) = sobel_3dx.at<cv::Vec3s>(i, j)[index];
+        sobel_dy.at<float>(i, j) = sobel_3dy.at<cv::Vec3s>(i, j)[index];
+        edges.at<float>(i, j) = maxedges;
       }
     }
   }
-
-  if (candidates.size() < tp.num_features)
-    return false;
-
-  stable_sort(candidates.begin(), candidates.end());
-
-  float distance = static_cast<float>(candidates.size() / tp.num_features + 1);
-  tp.selectFeatures_from(candidates, distance);
-  return true;
+  normalize(edges, edges, 0, 100.0f, cv::NORM_MINMAX, CV_32F);
+  phase(sobel_dx, sobel_dy, angles, true);
 }
 
-Ptr<Template> Template::createPtr_from(const Mat &src,
+void Template::createTemplate(const cv::Mat &src, Template &tp,
+                              int nms_kernel_size, float scatter_distance) {
+  cv::Mat edges, angles;
+
+  getOriMat(src, edges, angles);
+  // cv::Mat edgesImage;
+  // cv::normalize(edges, edgesImage, 0, 255, cv::NORM_MINMAX, CV_8U);
+  // cv::imshow("edges", edgesImage);
+  // cv::waitKey();
+
+  tp.selectFeatures_from(edges, angles, nms_kernel_size);
+
+  tp.scatter();
+}
+
+cv::Ptr<Template> Template::createPtr_from(const cv::Mat &src,
                                            TemplateParams params) {
-  Ptr<Template> tp = makePtr<Template>(params);
+  cv::Ptr<Template> tp = cv::makePtr<Template>(params);
 
   for (int i = 0; i < 100; i++) {
-    createTemplate(src, *tp, tp->nms_kernel_size);
-    if (tp->features.size() >= tp->num_features)
+    createTemplate(src, *tp, tp->nms_kernel_size, tp->scatter_distance);
+    if (tp->prograds.size() >= tp->num_features)
       break;
     else {
       if (tp->nms_kernel_size > 3)
         tp->nms_kernel_size -= 2;
+      else {
+        tp->scatter_distance +=
+            (float)tp->nms_kernel_size * tp->num_features / tp->prograds.size();
+      }
     }
   }
-  if (tp->features.size() >= tp->num_features)
+  if (tp->prograds.size() >= tp->num_features)
     tp->template_created = true;
   else {
     cerr << "无法找到的足够的特征点！" << endl;
-    tp->features.clear();
+    tp->prograds.clear();
   }
 
   return tp;
 }
 
-void line2d::Template::create_from(const Mat &src) {
+void line2d::Template::create_from(const cv::Mat &src) {
   for (int i = 0; i < 100; i++) {
-    createTemplate(src, *this, nms_kernel_size);
-    if (features.size() >= num_features)
+    createTemplate(src, *this, nms_kernel_size, scatter_distance);
+    if (prograds.size() >= num_features)
       break;
     else {
       if (nms_kernel_size > 3)
         nms_kernel_size -= 2;
+      else {
+        scatter_distance +=
+            (float)nms_kernel_size * num_features / prograds.size();
+      }
     }
   }
-  if (features.size() >= num_features)
+  if (prograds.size() >= num_features)
     template_created = true;
   else {
     cerr << "无法找到的足够的特征点！" << endl;
-    features.clear();
+    prograds.clear();
   }
 }
 
-void Template::selectFeatures_from(vector<Feature> &candidates, float distance) {
-  CV_Assert(distance > 2.0f);
-  CV_Assert(!candidates.empty());
+void Template::selectFeatures_from(const cv::Mat &edges, const cv::Mat &angles,
+                                   int kernel_size) {
+  int NEIGHBOR_THRESHOLD = (kernel_size * kernel_size) / 2 + 1;
+  // 计算领域中出现次数最多的量化特征方向
+  cv::Mat orientation_map = cv::Mat::zeros(angles.size(), CV_8U);
+  for (int i = 0; i < edges.rows; i++) {
+    for (int j = 0; j < edges.cols; j++) {
+      if (edges.at<float>(i, j) <= grad_norm)
+        continue;
+      int max_count = 0;
+      int orientaion = 0;
+      int ori_count[16] = {0};
+      for (int dy = -kernel_size / 2; dy < kernel_size / 2 + 1; dy++) {
+        for (int dx = -kernel_size / 2; dx < kernel_size / 2 + 1; dx++) {
+          int _ori = angle2ori(angles.at<float>(i + dy, j + dx));
+          ori_count[_ori]++;
+          if (ori_count[_ori] > max_count) {
+            max_count = ori_count[_ori];
+            orientaion = _ori;
+          }
+        }
+      }
+      if (max_count >= NEIGHBOR_THRESHOLD)
+        orientation_map.at<uchar>(i, j) = orientaion;
+    }
+  }
 
-  features.clear();
+  // 取领域中的梯度值最大的点为特征点
+  cv::Point center(edges.cols / 2, edges.rows / 2);
+  for (int i = 0; i < edges.rows; i++) {
+    for (int j = 0; j < edges.cols; j++) {
+      if (edges.at<float>(i, j) > grad_norm) {
+        prograds.push_back(Feature(cv::Point(j - center.x, i - center.y),
+                                   angles.at<float>(i, j),
+                                   edges.at<float>(i, j)));
+        prograds.back().orientation = (int)orientation_map.at<uchar>(i, j);
+      }
+    }
+  }
+}
+
+void Template::scatter() {
+  stable_sort(prograds.begin(), prograds.end());
+  float distance = static_cast<float>(prograds.size() / num_features + 1);
   float distance_sq = distance * distance;
+  std::vector<Feature> features;
   int i = 0;
+  bool first_select = true;
 
   while (features.size() < num_features) {
-    const Feature &c = candidates[i];
+    const Feature &c = prograds[i];
     bool keep = true;
     for (int j = 0; (j < (int)features.size()) && keep; j++) {
       Feature &fj = features[j];
-      keep = (c.x - fj.x) * (c.x - fj.x) + (c.y - fj.y) * (c.y - fj.y) >=
+      keep = (c.p_xy.x - fj.p_xy.x) * (c.p_xy.x - fj.p_xy.x) +
+                 (c.p_xy.y - fj.p_xy.y) * (c.p_xy.y - fj.p_xy.y) >=
              distance_sq;
     }
     if (keep)
       features.push_back(c);
 
-    if (++i == (int)candidates.size()) {
+    if (++i == (int)prograds.size()) {
+      bool num_ok = features.size() >= num_features;
+
+      if (first_select) {
+        if (num_ok) {
+          features.clear(); // we don't want too many first time
+          i = 0;
+          distance += 1.0f;
+          distance_sq = distance * distance;
+          continue;
+        } else {
+          first_select = false;
+        }
+      }
+
+      // Start back at beginning, and relax required distance
       i = 0;
       distance -= 1.0f;
       distance_sq = distance * distance;
+      if (num_ok || distance < 3) {
+        break;
+      }
     }
   }
+
+  prograds = features;
 }
 
 vector<Template::Feature> Template::relocate_by(shapeInfo_producer::Info info) {
   Timer time;
   float theta = -info.angle / 180.0f * CV_PI;
   vector<Feature> new_prograds;
-  for (const auto &pg : features) {
-    Point2f newPoint;
-    newPoint.x = info.scale * (cos(theta) * pg.x - sin(theta) * pg.y);
-    newPoint.y = info.scale * (sin(theta) * pg.x + cos(theta) * pg.y);
-    new_prograds.push_back(Feature(newPoint.x, newPoint.y,
+  for (const auto &pg : prograds) {
+    cv::Point2f newPoint;
+    newPoint.x = info.scale * (cos(theta) * pg.p_xy.x - sin(theta) * pg.p_xy.y);
+    newPoint.y = info.scale * (sin(theta) * pg.p_xy.x + cos(theta) * pg.p_xy.y);
+    new_prograds.push_back(Feature(cv::Point(newPoint.x, newPoint.y),
                                    fmod(pg.angle - info.angle + 360.0f, 360.0f),
-                                   pg.score));
+                                   pg.grad_norm));
+    new_prograds.back().orientation = angle2ori(new_prograds.back().angle);
   }
   __time__relocate__ += time.elapsed();
   return new_prograds;
 }
 
-void Template::show_in(Mat &background, Point center,
-                       shapeInfo_producer::Info info) {
+void Template::show_in(cv::Mat &background, cv::Point center,
+                       shapeInfo_producer::Info info, int size) {
   if (background.type() == CV_8U)
-    cvtColor(background, background, COLOR_GRAY2BGR);
+    cv::cvtColor(background, background, cv::COLOR_GRAY2BGR);
 
-  Point leftup(background.cols, background.rows);
-  Point rightdown(0, 0);
+  cv::Point leftup(background.cols, background.rows);
+  cv::Point rightdown(0, 0);
+
   vector<Feature> new_prograds = relocate_by(info);
+
   for (const auto &pg : new_prograds) {
-    Point cur = center + Point(pg.x, pg.y);
-    circle(background, cur, 1, Scalar(0, 0, 255), -1);
+    cv::Point cur = center + pg.p_xy;
+    cv::drawMarker(background, cur, cv::Scalar(0, 0, 255), cv::MARKER_SQUARE,
+                   size);
     leftup.x = min(leftup.x, cur.x);
     leftup.y = min(leftup.y, cur.y);
     rightdown.x = max(rightdown.x, cur.x);
@@ -403,9 +477,10 @@ void Template::show_in(Mat &background, Point center,
   leftup.y = max(leftup.y - 5, 0);
   rightdown.x = min(rightdown.x + 5, background.cols - 1);
   rightdown.y = min(rightdown.y + 5, background.rows - 1);
-  rectangle(background, Rect(leftup, rightdown), Scalar(0, 255, 0),
+  cv::rectangle(background, cv::Rect(leftup, rightdown), cv::Scalar(0, 255, 0),
                 1);
-  circle(background, center, 1, Scalar(0, 255, 0), -1);
+  cv::drawMarker(background, center, cv::Scalar(0, 255, 0), cv::MARKER_DIAMOND,
+                 size);
 }
 
 Detector::Detector() {
@@ -413,14 +488,15 @@ Detector::Detector() {
   init_costable();
 }
 
-void Detector::quantize(const Mat &edges, const Mat &angles,
-                        Mat &ori_bit, int kernel_size, float magnitude_threshold) {
-  ori_bit = Mat::zeros(angles.size(), CV_16U);
-  // Mat ori_mat = Mat::ones(angles.size(), CV_8U);
+void Detector::quantize(const cv::Mat &edges, const cv::Mat &angles,
+                        cv::Mat &ori_bit, int kernel_size, float grad_norm) {
+  ori_bit = cv::Mat::zeros(angles.size(), CV_16U);
+  // cv::Mat ori_mat = cv::Mat::ones(angles.size(), CV_8U);
   // ori_mat *= 125;
   for (int i = 0; i < edges.rows; i++) {
     for (int j = 0; j < edges.cols; j++) {
-      if (edges.at<float>(i, j) <= magnitude_threshold) continue;
+      if (edges.at<float>(i, j) <= grad_norm)
+        continue;
       int max_count = 0;
       int orientation = 0;
       int ori_count[16] = {0};
@@ -429,7 +505,7 @@ void Detector::quantize(const Mat &edges, const Mat &angles,
           if (i + dy < 0 || i + dy >= edges.rows || j + dx < 0 ||
               j + dx >= edges.cols)
             continue;
-          if (edges.at<float>(i + dy, j + dx) > magnitude_threshold) {
+          if (edges.at<float>(i + dy, j + dx) > grad_norm) {
             int _ori = angle2ori(angles.at<float>(i + dy, j + dx));
             ori_count[_ori]++;
             if (ori_count[_ori] > max_count) {
@@ -445,13 +521,13 @@ void Detector::quantize(const Mat &edges, const Mat &angles,
       // }
     }
   }
-  // namedWindow("ori_mat", WINDOW_NORMAL);
-  // imshow("ori_mat", ori_mat);
-  // waitKey();
+  // cv::namedWindow("ori_mat", cv::WINDOW_NORMAL);
+  // cv::imshow("ori_mat", ori_mat);
+  // cv::waitKey();
 }
 
-void Detector::spread(Mat &ori_bit, Mat &spread_ori, int kernel_size) {
-  spread_ori = Mat::zeros(ori_bit.size(), CV_16U);
+void Detector::spread(cv::Mat &ori_bit, cv::Mat &spread_ori, int kernel_size) {
+  spread_ori = cv::Mat::zeros(ori_bit.size(), CV_16U);
   for (int i = 0; i < ori_bit.rows; i++) {
     for (int j = 0; j < ori_bit.cols; j++) {
       // cout << "(debug)" << endl;
@@ -464,26 +540,28 @@ void Detector::spread(Mat &ori_bit, Mat &spread_ori, int kernel_size) {
               !ori_bit.at<ushort>(u, v))
             continue;
           // cout << "point in kernel:" << u << "," << v << endl;
-          // cout << "oir_bit:" << bitset<16>(ori_bit.at<ushort>(u, v)) << endl;
+          // cout << "oir_bit:" << bitset<16>(ori_bit.at<ushort>(u, v)) <<
+          // endl;
           spread_ori.at<ushort>(i, j) |= ori_bit.at<ushort>(u, v);
-          // cout << "spread_ori:" << bitset<16>(spread_ori.at<ushort>(i, j)) <<
-          // endl; cin.get();
+          // cout << "spread_ori:" << bitset<16>(spread_ori.at<ushort>(i, j))
+          // << endl; cin.get();
         }
       }
     }
   }
 }
 
-void Detector::computeResponseMaps(Mat &spread_ori,
-                                   vector<Mat> &response_maps) {
+void Detector::computeResponseMaps(cv::Mat &spread_ori,
+                                   vector<cv::Mat> &response_maps) {
   response_maps.resize(16);
   for (int i = 0; i < 16; i++)
-    response_maps[i] = Mat::zeros(spread_ori.size(), CV_32F);
+    response_maps[i] = cv::Mat::zeros(spread_ori.size(), CV_32F);
 
   int maxValue = numeric_limits<ushort>::max();
   for (int i = 0; i < spread_ori.rows; i++) {
     for (int j = 0; j < spread_ori.cols; j++) {
-      if (!spread_ori.at<ushort>(i, j)) continue;
+      if (!spread_ori.at<ushort>(i, j))
+        continue;
       for (int orientation = 0; orientation < 16; orientation++) {
         // cout << "(debug)" << endl;
         response_maps[orientation].at<float>(i, j) =
@@ -511,7 +589,7 @@ void Detector::para_computeSimilarityMap(
   // 并行计算
   for (int i = start; i < end; i++) {
     for (const auto &point : features) {
-      Point cur = Point(point.x + i % 4, point.y + i / 4);
+      cv::Point cur = point.p_xy + cv::Point(i % 4, i / 4);
 
       int mod_y = cur.y % 4 < 0 ? (cur.y % 4) + 4 : cur.y % 4;
       int mod_x = cur.x % 4 < 0 ? (cur.x % 4) + 4 : cur.x % 4;
@@ -521,7 +599,7 @@ void Detector::para_computeSimilarityMap(
 
       for (int j = 0; j < similarity.linear_size(); j++) {
         similarity.at(i, j) +=
-            memories[point.label].at(mod_y * 4 + mod_x, j + offset);
+            memories[point.orientation].at(mod_y * 4 + mod_x, j + offset);
       }
     }
   }
@@ -536,11 +614,10 @@ void Detector::computeSimilarityMap(vector<LinearMemories> &memories,
   similarity.rows = memories[0].rows;
   similarity.cols = memories[0].cols;
 
-  const int numThreads = thread::hardware_concurrency();
+  const int numThreads = std::thread::hardware_concurrency();
   const int workloadPerThread = (16 + numThreads - 1) / numThreads;
 
-  vector<thread> threads;
-  // atomic<int> currentRow(0);
+  std::vector<std::thread> threads;
 
   // 启动多个线程并行计算
   for (int t = 0; t < numThreads; t++) {
@@ -551,7 +628,8 @@ void Detector::computeSimilarityMap(vector<LinearMemories> &memories,
       para_computeSimilarityMap(memories, features, similarity, start, end);
     });
 
-    if (end == 16) break;
+    if (end == 16)
+      break;
   }
 
   // 等待所有线程完成
@@ -568,21 +646,95 @@ void Detector::computeSimilarityMap(vector<LinearMemories> &memories,
   }
 }
 
+// void computeSimilarity(cv::Mat &similarity_map,
+//                        std::vector<Detector::LinearMemories> &memories,
+//                        std::vector<Template::Feature>::const_iterator it,
+//                        std::vector<Template::Feature>::const_iterator it_end,
+//                        const vector<cv::Rect> &rois) {
+//   std::vector<bool> visited(similarity_map.rows * similarity_map.cols, false);
+//   for (size_t k = 0; k < rois.size(); k++) {
+//     for (int i = rois[k].y; i <= rois[k].y + rois[k].height; i++) {
+//       for (int j = rois[k].x; j <= rois[k].x + rois[k].width; j++) {
+//         if (visited[i * similarity_map.cols + j])
+//           continue;
+//         visited[i * similarity_map.cols + j] = true;
+
+//         for (;it != it_end; it++) {
+//           const Template::Feature &point = *it;
+//           cv::Point cur = point.p_xy + cv::Point(j, i);
+//           if (cur.y < 0 || cur.x < 0 || cur.y >= similarity_map.rows ||
+//               cur.x >= similarity_map.cols)
+//             continue;
+//           int position_cur = cur.y / 4 * memories[0].cols + cur.x / 4;
+//           int order_kernel = (cur.y % 4) * 4 + cur.x % 4;
+//           similarity_map.at<float>(i, j) +=
+//               memories[point.orientation].at(order_kernel, position_cur);
+//         }
+//       }
+//     }
+//   }
+// }
+
+// void Detector::localSimilarityMap(vector<LinearMemories> &memories,
+//                                   const vector<Template::Feature> &features,
+//                                   cv::Mat &similarity_map,
+//                                   vector<cv::Rect> &rois) {
+//   CV_Assert(!rois.empty());
+//   int n_rows = memories[0].rows * 4;
+//   int n_cols = memories[0].cols * 4;
+
+//   similarity_map = cv::Mat::zeros(n_rows, n_cols, CV_32F);
+
+//   int numThreads = std::thread::hardware_concurrency();
+//   numThreads = (numThreads == 0) ? 1 : numThreads;
+
+//   int numFeatures = features.size();
+//   int featuresPerThread = (numFeatures + numThreads - 1) / numThreads;
+//   std::vector<Template::Feature>::const_iterator it = features.begin();
+
+//   std::vector<std::thread> threads;
+
+//   for (int t = 0; t < numThreads; t++) {
+//     int startIdx = t * featuresPerThread;
+//     int endIdx = std::min(startIdx + featuresPerThread, numFeatures);
+
+//     threads.emplace_back([&]() {
+//       computeSimilarity(similarity_map, memories, 
+//                         it + startIdx, it + endIdx, rois);
+//     });
+
+//     if (endIdx == numFeatures)
+//       break;
+//   }
+
+//   for (auto &thread : threads) {
+//     thread.join();
+//   }
+
+//   // 转化为 100 分制
+//   similarity_map = similarity_map / (float)features.size() * 100.0f;
+// }
+
 void Detector::localSimilarityMap(vector<LinearMemories> &memories,
                                   const vector<Template::Feature> &features,
-                                  Mat &similarity_map,
-                                  vector<Rect> &rois) {
+                                  cv::Mat &similarity_map,
+                                  vector<cv::Rect> &rois) {
   CV_Assert(!rois.empty());
   int n_rows = memories[0].rows * 4;
   int n_cols = memories[0].cols * 4;
 
-  similarity_map = Mat::zeros(n_rows, n_cols, CV_32F);
+  similarity_map = cv::Mat::zeros(n_rows, n_cols, CV_32F);
+  vector<bool> visited(n_rows * n_cols, false);
 
   for (size_t k = 0; k < rois.size(); k++) {
     for (int i = rois[k].y; i <= rois[k].y + rois[k].height; i++) {
       for (int j = rois[k].x; j <= rois[k].x + rois[k].width; j++) {
+        if (visited[i * n_cols + j])
+          continue;
+        visited[i * n_cols + j] = true;
+
         for (const auto &point : features) {
-          Point cur = Point(point.x + j, point.y + i);
+          cv::Point cur = point.p_xy + cv::Point(j, i);
 
           if (cur.y < 0 || cur.x < 0 || cur.y >= n_rows || cur.x >= n_cols)
             continue;
@@ -592,8 +744,9 @@ void Detector::localSimilarityMap(vector<LinearMemories> &memories,
           // 计算坐标在 TxT 分块中的顺序索引
           int order_kernel = (cur.y % 4) * 4 + cur.x % 4;
           // 计算相似度矩阵
+          #pragma omp atomic
           similarity_map.at<float>(i, j) +=
-              memories[point.label].at(order_kernel, position_cur);
+              memories[point.orientation].at(order_kernel, position_cur);
         }
       }
     }
@@ -603,7 +756,7 @@ void Detector::localSimilarityMap(vector<LinearMemories> &memories,
   similarity_map = similarity_map / (float)features.size() * 100.0f;
 }
 
-void Detector::linearize(std::vector<Mat> &response_maps,
+void Detector::linearize(std::vector<cv::Mat> &response_maps,
                          vector<LinearMemories> &linearized_memories) {
   // 计算分块后矩阵的行数, 列数
   int n_rows = response_maps[0].rows / 4;
@@ -613,35 +766,20 @@ void Detector::linearize(std::vector<Mat> &response_maps,
   linearized_memories.resize(16);
   for (int i = 0; i < 16; i++) {
     linearized_memories[i].create(16,
-                                  n_rows * n_cols);  // 16 -> 线性化单元块的大小
-    linearized_memories[i].rows = n_rows;  // 记录行数 (便于后续还原)
-    linearized_memories[i].cols = n_cols;  // 记录列数 (便于后续还原)
+                                  n_rows * n_cols); // 16 -> 线性化单元块的大小
+    linearized_memories[i].rows = n_rows; // 记录行数 (便于后续还原)
+    linearized_memories[i].cols = n_cols; // 记录列数 (便于后续还原)
   }
 
-  // cout << "(debug)" << endl;
-  // cout << "分块矩阵大小:" << n_rows << "x" << n_cols << endl;
   for (int orientation = 0; orientation < 16; orientation++) {
     for (int i = 0; i < n_rows; i++) {
       for (int j = 0; j < n_cols; j++) {
         for (int di = 0; di < 4; di++) {
           for (int dj = 0; dj < 4; dj++) {
-            // if (abs(response_maps[orientation].at<float>(4 * i + di, 4 * j +
-            // dj)) < line2d_eps) continue; cout << "分块坐标:" << i << "," << j
-            // << endl; cout << "单像素坐标:" << 4*i + di << "," << 4*j + dj <<
-            // endl; cout << "order in kernel:" << di * 4 + dj << endl; cout <<
-            // "index in linear vector:" << i * n_cols + j << endl; cout <<
-            // "response_maps:" << response_maps[orientation].at<float>(4 * i +
-            // di, 4 * j + dj) << endl; cout << "linearized_memories:" <<
-            // linearized_memories[orientation].at(di * 4 + dj,
-            //                                     i * n_cols + j) << endl;
             int order_in_kernel = di * 4 + dj;
             linearized_memories[orientation].at(order_in_kernel,
                                                 i * n_cols + j) =
                 response_maps[orientation].at<float>(4 * i + di, 4 * j + dj);
-            // cout << "linearized_memories:" <<
-            // linearized_memories[orientation].at(di * 4 + dj,
-            //                                     i * n_cols + j) << endl;
-            // cin.get();
           }
         }
       }
@@ -650,9 +788,9 @@ void Detector::linearize(std::vector<Mat> &response_maps,
 }
 
 void Detector::unlinearize(LinearMemories &similarity,
-                           Mat &similarity_map) {
+                           cv::Mat &similarity_map) {
   similarity_map =
-      Mat::zeros(similarity.rows * 4, similarity.cols * 4, CV_32F);
+      cv::Mat::zeros(similarity.rows * 4, similarity.cols * 4, CV_32F);
   for (int i = 0; i < 16; i++) {
     for (int j = 0; j < similarity.linear_size(); j++) {
       int u = (j / similarity.cols) * 4 + i / 4;
@@ -662,183 +800,375 @@ void Detector::unlinearize(LinearMemories &similarity,
   }
 }
 
-void Detector::produceRoi(Mat &similarity_map,
-                          std::vector<Rect> &roi_list, int lower_score) {
+void Detector::produceRoi(cv::Mat &similarity_map,
+                          std::vector<cv::Rect> &roi_list, int lower_score) {
   Timer time;
-  Mat binary_mat;
-  Mat labels, stats, centroids;
+  cv::Mat binary_mat;
+  cv::threshold(similarity_map, binary_mat, lower_score, 255,
+                cv::THRESH_BINARY);
+  if (binary_mat.type() != CV_8U)
+    binary_mat.convertTo(binary_mat, CV_8U);
 
-  threshold(similarity_map, binary_mat, lower_score, 255,
-                THRESH_BINARY);
-  if (binary_mat.type() != CV_8U) binary_mat.convertTo(binary_mat, CV_8U);
-
+  cv::Mat labels, stats, centroids;
   int numLabels =
-      connectedComponentsWithStats(binary_mat, labels, stats, centroids);
+      cv::connectedComponentsWithStats(binary_mat, labels, stats, centroids);
 
   roi_list.clear();
   for (int i = 1; i < numLabels; i++) {
-    Rect roi(stats.at<int>(i, CC_STAT_LEFT),
-                 stats.at<int>(i, CC_STAT_TOP),
-                 stats.at<int>(i, CC_STAT_WIDTH),
-                 stats.at<int>(i, CC_STAT_HEIGHT));
+    cv::Rect roi(stats.at<int>(i, cv::CC_STAT_LEFT),
+                 stats.at<int>(i, cv::CC_STAT_TOP),
+                 stats.at<int>(i, cv::CC_STAT_WIDTH),
+                 stats.at<int>(i, cv::CC_STAT_HEIGHT));
     roi_list.push_back(roi);
   }
   __time__produceroi__ += time.elapsed();
 }
 
-void Detector::addSourceImage(const Mat &src, int pyramid_level, Mat mask,
-                              const String &memories_id) {
-  ImagePyramid src_pyramid;
-  Mat target_src;
+void Detector::setSourceImage(const cv::Mat &src, int pyramid_level,
+                              cv::Mat mask) {
+  cv::Mat target_src;
   if (!mask.empty())
     src.copyTo(src, mask);
   else
     target_src = src.clone();
-  
   src_pyramid.buildPyramid(target_src, pyramid_level);
 
-  memory_pyramid mp;
-  mp.reserve(pyramid_level);
+  // 计算梯度响应矩阵
+  memory_pyramid.resize(pyramid_level);
   for (int i = 0; i < pyramid_level; i++) {
-    Mat magnitude, sobel_dx, sobel_dy;
-    sobelMagnitude(src_pyramid[i], magnitude, sobel_dx, sobel_dy);
+    cv::Mat edges, angles;
+    Template::getOriMat(src_pyramid[i], edges, angles);
+    // cv::Mat edgesImage;
+    // cv::normalize(edges, edgesImage, 0, 255, cv::NORM_MINMAX, CV_8U);
+    // cv::imshow("edges", edgesImage);
+    // cv::waitKey();
 
-    Mat sobel_ag;
-    phase(sobel_dx, sobel_dy, sobel_ag, true);
+    cv::Mat ori_bit;
+    quantize(edges, angles, ori_bit, 3, 0.2f);
 
-    Mat ori_bit;
-    quantize(magnitude, sobel_ag, ori_bit, 3, 0.2f);
-
-    Mat spread_ori;
+    cv::Mat spread_ori;
     spread(ori_bit, spread_ori, 3);
+    // cv::Mat spreadImage;
+    // cv::namedWindow("spreadImage", cv::WINDOW_NORMAL);
+    // cv::normalize(spread_ori, spreadImage, 0, 255, cv::NORM_MINMAX, CV_8U);
+    // cv::imshow("spreadImage", spreadImage);
+    // cv::waitKey();
 
-    vector<Mat> response_maps;
+    vector<cv::Mat> response_maps;
     computeResponseMaps(spread_ori, response_maps);
+    // for (int i = 0; i < 16; i++) {
+    //   cv::Mat responseImage;
+    //   cv::namedWindow("responseImage " + to_string(i + 1),
+    //   cv::WINDOW_NORMAL); responseImage = (response_maps[i] + 1) * (255.0f
+    //   / 2); responseImage.convertTo(responseImage, CV_8U);
+    //   cv::imshow("responseImage " + to_string(i + 1), responseImage);
+    //   cv::waitKey();
+    // }
 
-    linearize(response_maps, mp[i]);
+    linearize(response_maps, memory_pyramid[i]);
+
+    // for (int j = 0; j < 16; j++) {
+    //   cv::Mat resImage, res_map;
+    //   unlinearize(memory_pyramid[i][j], res_map);
+    //   cv::namedWindow("resImage " + to_string(j + 1), cv::WINDOW_NORMAL);
+    //   resImage = (res_map + 1) * (255.0f / 2);
+    //   resImage.convertTo(resImage, CV_8U);
+    //   cv::imshow("resImage " + to_string(j + 1), resImage);
+    //   cv::waitKey();
+    // }
   }
-  memories_map.insert(std::make_pair(memories_id, mp));
 }
 
-void Detector::addTemplate(const Mat &temp_src, int pyramid_level,
-                          Template::TemplateParams params, Mat mask,
-                          shapeInfo_producer *sip,
-                          const String &templates_id) {
-    ImagePyramid temp_pyramid;
-    Mat target_temp;
-    if (!mask.empty())
-      temp_src.copyTo(target_temp, mask);
+void Detector::setTempate(const cv::Mat &temp_src, int pyramid_level,
+                          Template::TemplateParams params, cv::Mat mask) {
+  ImagePyramid temp_pyramid;
+  cv::Mat target_temp;
+  if (!mask.empty()) {
+    // 找到遮罩中非零像素的边界矩形
+    cv::Rect boundingRect = cv::boundingRect(mask);
+    // 对经过遮罩的图像进行裁剪，获取目标图像
+    target_temp = temp_src(boundingRect).clone();
+  } else
+    target_temp = temp_src.clone();
+  temp_pyramid.buildPyramid(target_temp, pyramid_level);
+
+  for (int i = 0; i < pyramid_level; i++) {
+    cv::Ptr<Template> tp = Template::createPtr_from(temp_pyramid[i], params);
+
+    cv::Mat tempImage = temp_pyramid[i].clone();
+
+    tp->show_in(tempImage,
+                cv::Point(temp_pyramid[i].cols / 2, temp_pyramid[i].rows / 2),
+                shapeInfo_producer::Info(), (16 >> i));
+    cv::namedWindow("tempImage", cv::WINDOW_NORMAL);
+    cv::imshow("tempImage", tempImage);
+    cv::waitKey();
+    cv::destroyWindow("tempImage");
+
+    if (tp->iscreated())
+      template_pyramid.push_back(tp);
     else
-      target_temp = temp_src.clone();
+      cerr << "模板创建失败" << endl;
 
-    temp_pyramid.buildPyramid(target_temp, pyramid_level);
-
-    vector<template_pyramid> vtp;
-
-    vector<shapeInfo_producer::Info> infos;
-    if (sip == nullptr || sip->Infos_constptr().empty()) {
-      infos.push_back(shapeInfo_producer::Info());
-    }
-    else 
-      infos = sip->Infos_constptr();
-
-    for (const auto &info : infos) {
-      template_pyramid tp;
-      for (int i = 0; i < pyramid_level; i++) {
-        Mat template_mat = sip->affineTrans(temp_pyramid[i], info.scale, info.angle);
-        Ptr<Template> templ = Template::createPtr_from(template_mat, params);
-        Mat tempImage = template_mat.clone();
-        templ->show_in(tempImage,
-                    Point(temp_pyramid[i].cols / 2, temp_pyramid[i].rows /
-                    2));
-        namedWindow("tempImage", WINDOW_NORMAL);
-        imshow("tempImage", tempImage);
-        waitKey();
-        destroyWindow("tempImage");
-
-        if (templ->iscreated())
-          tp.push_back(templ);
-        else
-        cerr << "模板创建失败" << endl;
-
-      // 更新下一层构造模板所需的参数
-      if (params.nms_kernel_size > 3) params.nms_kernel_size -= 2;
-      if (params.num_features > 40)
-        params.num_features = params.num_features >> 1;
-    }
-    vtp.push_back(tp);
+    // 更新下一层构造模板所需的参数
+    if (params.nms_kernel_size > 3)
+      params.nms_kernel_size -= 2;
+    if (params.num_features > 40)
+      params.num_features = params.num_features >> 1;
   }
-
-  templates_map.insert(make_pair(templates_id, vtp));
 }
 
-void Detector::match(const Mat &sourceImage,
-                     shapeInfo_producer *sip, int lower_score,
-                     Template::TemplateParams params,
-                     Mat mask_src) {
+void Detector::nmsMatchPoints(vector<MatchPoint> &match_points,
+                              float threshold) {
+  stable_sort(match_points.begin(), match_points.end(),
+              [](const MatchPoint &a, const MatchPoint &b) {
+                return a.similarity < b.similarity;
+              });
+
+  vector<MatchPoint> filtered_points;
+
+  for (int i = 0; i < (int)match_points.size(); i++) {
+    bool keep = true;
+
+    for (int j = i + 1; j < (int)match_points.size(); j++) {
+      // 计算当前点与比较点之间的差异
+      float dx = match_points[i].p_xy.x - match_points[j].p_xy.x;
+      float dy = match_points[i].p_xy.y - match_points[j].p_xy.y;
+      float dscale = match_points[i].info.scale - match_points[j].info.scale;
+      float dangle = match_points[i].info.angle - match_points[j].info.angle;
+
+      // 计算距离或重叠度量
+      float distance = std::sqrt(dx * dx + dy * dy) / 2;
+      float diffScale = std::abs(dscale) * 0.02;
+      float diffAngle = std::abs(dangle) * 0.2;
+
+      // 根据阈值判断是否保留当前点
+      if (distance < threshold && diffScale < threshold &&
+          diffAngle < threshold) {
+        keep = false;
+        break;
+      }
+    }
+
+    if (keep)
+      filtered_points.push_back(match_points[i]);
+  }
+
+  match_points = filtered_points;
+}
+
+void Detector::selectMatchPoints(cv::Mat &similarity_map,
+                                 vector<cv::Rect> &roi_list, float lower_score,
+                                 shapeInfo_producer::Info info) {
+  if (roi_list.empty())
+    return;
+
+  float best_score;
+  cv::Point best_match;
+
+  for (const cv::Rect &roi : roi_list) {
+    best_score = 0.0f;
+    for (int x = roi.x; x <= roi.x + roi.width; x++) {
+      for (int y = roi.y; y <= roi.y + roi.height; y++) {
+        float &score = similarity_map.at<float>(y, x);
+        if (score > best_score) {
+          best_score = score;
+          best_match = cv::Point(x, y);
+        }
+      }
+    }
+    if (best_score > lower_score)
+      match_points.push_back(MatchPoint(best_match, best_score, info));
+  }
+}
+
+void Detector::match(const cv::Mat &sourceImage, const cv::Mat &templateImage,
+                     float lower_score, Template::TemplateParams params,
+                     cv::Mat mask_src, cv::Mat mask_temp) {
   int min_CR = min(sourceImage.rows, sourceImage.cols);
   int try_level = 1;
-  while (128 * (1 << try_level) < min_CR) try_level++;
+  while (128 * (1 << try_level) < min_CR)
+    try_level++;
   pyramid_level = try_level;
 
   Timer _time;
   Timer __time;
 
-  addSourceImage(sourceImage, pyramid_level, mask_src);
+  setSourceImage(sourceImage, pyramid_level, mask_src);
   __time.out("目标图片梯度响应初始化!");
 
-  addTemplate(sip->src_of(), pyramid_level, params, sip->mask_of());
+  setTempate(templateImage, pyramid_level, params, mask_temp);
   __time.out("创建模板!");
 
+  // 从最高层开始相似度匹配
+  vector<cv::Rect> rois;
+  cv::Mat similarity_map;
+  LinearMemories similarity;
+  int match_level = pyramid_level - 1;
+
+  computeSimilarityMap(memory_pyramid[match_level],
+                       template_pyramid[match_level]->pg_ptr(), similarity);
+
+  unlinearize(similarity, similarity_map);
+  __time.out("__全局计算__");
+  cv::Mat similarityImage;
+  cv::namedWindow("similarityImage", cv::WINDOW_NORMAL);
+  cv::normalize(similarity_map, similarityImage, 0, 255, cv::NORM_MINMAX,
+                CV_8U);
+  cv::imshow("similarityImage", similarityImage);
+  cv::setMouseCallback("similarityImage", __onMouse, &similarity_map);
+  cv::waitKey();
+
+  // localSimilarityMap(memory_pyramid[match_level],
+  // *template_pyramid[match_level],
+  //                    similarity_map, rois);
+  // cv::namedWindow("localsimilarityImage", cv::WINDOW_NORMAL);
+  // cv::normalize(similarity_map, similarityImage, 0, 255, cv::NORM_MINMAX,
+  //               CV_8U);
+  // cv::imshow("localsimilarityImage", similarityImage);
+  // cv::setMouseCallback("localsimilarityImage", __onMouse, &similarity_map);
+  // cv::waitKey();
+
+  produceRoi(similarity_map, rois, lower_score);
+
+  while (--match_level >= 0) {
+    vector<cv::Rect> next_rois;
+
+    for (const cv::Rect &roi : rois) {
+      cv::Rect next_roi(roi.x * 2, roi.y * 2, roi.width * 2, roi.height * 2);
+      next_rois.push_back(next_roi);
+    }
+
+    rois = next_rois;
+    if (rois.empty())
+      break;
+    __time.reset();
+
+    localSimilarityMap(memory_pyramid[match_level],
+                       template_pyramid[match_level]->pg_ptr(), similarity_map,
+                       rois);
+
+    // cv::namedWindow("localsimilarityImage", cv::WINDOW_NORMAL);
+    // cv::normalize(similarity_map, similarityimage, 0, 255, cv::NORM_MINMAX,
+    //               CV_8U);
+    // cv::imshow("localsimilarityImage", similarityImage);
+    // cv::setMouseCallback("localsimilarityImage", __onMouse,
+    // &similarity_map); cv::waitKey();
+
+    produceRoi(similarity_map, rois, lower_score);
+    __time.out("__局部计算__");
+  }
+
+  selectMatchPoints(similarity_map, rois, lower_score);
+
+  nmsMatchPoints(match_points, 10.0f);
+
+  _time.out("模板匹配计算完毕!");
+}
+
+void line2d::Detector::match(const cv::Mat &sourceImage,
+                             shapeInfo_producer *sip, float lower_score,
+                             Template::TemplateParams params,
+                             cv::Mat mask_src) {
+  int min_CR = min(sourceImage.rows, sourceImage.cols);
+  int try_level = 1;
+  while (128 * (1 << try_level) < min_CR)
+    try_level++;
+  pyramid_level = try_level;
+
+  Timer _time;
+  Timer __time;
+
+  setSourceImage(sourceImage, pyramid_level, mask_src);
+  __time.out("目标图片梯度响应初始化!");
+
+  setTempate(sip->src_of(), pyramid_level, params, sip->mask_of());
+  __time.out("创建模板!");
+
+  match_points.clear();
   _time.out("__初始化完毕!__");
 
   double time1 = 0.0;
   double time2 = 0.0;
 
-  matchClass("default");
-  
-  _time.out("__模板匹配计算完毕!__");
-  cout << "全局计算时间: " << time1 << "s" << endl;
-  cout << "局部计算时间: " << time2 << "s" << endl;
-}
-
-void line2d::Detector::matchClass(const cv::String &match_id) {
-  memory_pyramid mp = memories_map[match_id];
-  vector<template_pyramid> vtp = templates_map[match_id];
-  matches points = matches_map[match_id];
-  points.clear();
-
-  for (int template_id = 0; template_id < (int)vtp.size(); template_id++) {
-    const template_pyramid &tp = vtp[template_id];
-
-    const vector<LinearMemories> &highest_lm = mp.back();
-
+  for (const auto &info : sip->Infos_constptr()) {
+    // 从最高层开始相似度匹配
+    vector<cv::Rect> rois;
+    cv::Mat similarity_map;
+    LinearMemories similarity;
     int match_level = pyramid_level - 1;
 
+    __time.reset();
+    computeSimilarityMap(memory_pyramid[match_level],
+                         template_pyramid[match_level]->relocate_by(info),
+                         similarity);
 
+    unlinearize(similarity, similarity_map);
+   
+    produceRoi(similarity_map, rois, lower_score);
+    time1 += __time.elapsed();
+
+    while (--match_level >= 0) {
+      vector<cv::Rect> next_rois;
+
+      for (const cv::Rect &roi : rois) {
+        cv::Rect next_roi(roi.x * 2, roi.y * 2, roi.width * 2, roi.height * 2);
+        next_rois.push_back(next_roi);
+      }
+
+      rois = next_rois;
+      if (rois.empty())
+        break;
+
+      __time.reset();
+      localSimilarityMap(memory_pyramid[match_level],
+                         template_pyramid[match_level]->relocate_by(info),
+                         similarity_map, rois);
+
+      produceRoi(similarity_map, rois, lower_score);
+      time2 += __time.elapsed();
+    }
+
+    if (match_level < 0)
+      selectMatchPoints(similarity_map, rois, lower_score, info);
+  }
+
+  nmsMatchPoints(match_points, 10.0f);
+
+  _time.out("__模板匹配计算完毕!__");
+  std::cout << "全局计算时间: " << time1 << "s" << endl;
+  std::cout << "局部计算时间: " << time2 << "s" << endl;
+}
+
+void line2d::Detector::detectBestMatch(std::vector<cv::Vec6f> &points) {
+  points.resize(match_points.size());
+  for (int i = 0; i < (int)points.size(); i++) {
+    points[i][0] = match_points[i].p_xy.x;
+    points[i][1] = match_points[i].p_xy.y;
+    points[i][2] = match_points[i].info.scale;
+    points[i][3] = match_points[i].info.angle;
+    points[i][4] = match_points[i].similarity;
   }
 }
 
-void Detector::draw(cv::Mat background, const cv::String &match_id, int template_id) {
-  if (matches_map[match_id].empty()) {
-    cerr << "没有找到匹配点!" << endl;
-    return;
-  }
-  template_pyramid tp = templates_map[match_id][template_id];
-  for (const auto &point : matches_map[match_id]) {
-    tp[0]->show_in(background, Point(point.x, point.y), tp[0]->);
-    Vec3b randColor;
+void line2d::Detector::draw() {
+  cv::Mat backgroundImage = src_pyramid[0].clone();
+  for (const auto &point : match_points) {
+    template_pyramid[0]->show_in(backgroundImage, point.p_xy, point.info, 16);
+    cv::Vec3b randColor;
     randColor[0] = rand() % 155 + 100;
     randColor[1] = rand() % 155 + 100;
     randColor[2] = rand() % 155 + 100;
-    putText(background, to_string(int(round(point.similarity))),
-                Point(point.x - 10, point.y - 3),
-                FONT_HERSHEY_PLAIN, 2, randColor);
+    cv::putText(backgroundImage, to_string(int(round(point.similarity))),
+                cv::Point(point.p_xy.x - 10, point.p_xy.y - 3),
+                cv::FONT_HERSHEY_PLAIN, 8, randColor);
   }
-  namedWindow("matchImage", WINDOW_NORMAL);
-  imshow("matchImage", background);
-  waitKey();
-  destroyWindow("matchImage");
+  if (match_points.empty())
+    cerr << "没有找到匹配点!" << endl;
+  cv::namedWindow("matchImage", cv::WINDOW_NORMAL);
+  cv::imshow("matchImage", backgroundImage);
+  cv::waitKey();
+  cv::destroyWindow("matchImage");
 }
 
 /// @todo 转为离线存储计算
@@ -850,12 +1180,20 @@ void Detector::init_costable() {
   for (int i = 0; i < 16; i++) {
     // time.out(to_string(i+1)+"轮循环 65535 * 16 计算开始");
     for (int bit = 1; bit <= maxValue; bit++) {
-      maxCos = -2.0f;  // < -1 = min_theta cos theta
+      maxCos = -2.0f; // < -1 = min_theta cos theta
       for (int k = 0; k < 16; k++) {
         if (bit & (1 << k)) {
           maxCos = maxCos < cos(abs(i - k) * _degree_(11.25f))
                        ? cos(abs(i - k) * _degree_(11.25f))
                        : maxCos;
+          // cout << "(debug)" << endl;
+          // cout << "i:" << bitset<16>(1<<i) << endl;
+          // cout << "bit:" << bitset<16>(bit) << endl;
+          // cout << "k:" << bitset<16>(1<<k) << endl;
+          // cout << "ori(i)" << ori2angle(i) << endl;
+          // cout << "ori(k)" << ori2angle(k) << endl;
+          // cout << "cos(ori(i) - oir(k)):" << cos(abs(i - k) *
+          // _degree_(11.25f)) << endl; cin.get();
         }
       }
       cos_table[i * maxValue + bit] = maxCos;

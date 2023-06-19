@@ -5,19 +5,7 @@
 
 namespace line2Dup {
 
-#define line2d_eps 1e-7f
-#define _degree_(x) ((x)*CV_PI) / 180.0
-
-#define QUANTIZE_BASE 16
-
-#if QUANTIZE_BASE == 16
-#define QUANTIZE_TYPE CV_16U
-typedef ushort quantize_type;
-#elif QUNATIZE_BASE == 8
-#define QUANTIZE_TYPE CV_8U
-#endif
-
-// Feature -> Gradient -> Candidate
+/// Feature -> Gradient -> Candidate
 
 struct Feature {
   int x;
@@ -30,7 +18,7 @@ struct Feature {
   void write(cv::FileStorage &fs) const;
 };
 
-#define angle2label(x) (static_cast<int>(x * 32.0 / 360.0) & 15)
+#define angle2label(x) (static_cast<int>(x * 32.0f / 360.0f + 0.5f) & 15)
 
 struct Gradient : Feature {
   float angle;
@@ -58,6 +46,8 @@ struct Candidate : Gradient {
 };
 
 // ShapeTemplate
+class LinearMemory;
+
 class ShapeTemplate {
 public:
   cv::RotatedRect box;
@@ -72,6 +62,10 @@ public:
   // 加载旋转缩放
   cv::Ptr<ShapeTemplate> relocate(float new_scale, float new_angle);
 
+  void show_in(cv::Mat &background, cv::Point new_center = cv::Point(-1, -1));
+
+  void show_in(cv::Mat &background, std::vector<LinearMemory> &score_maps, cv::Point new_center = cv::Point(-1, -1));
+
   // 数据存储与读取
   void read(const cv::FileNode &fn);
   void write(cv::FileStorage &fs) const;
@@ -83,17 +77,40 @@ struct Range {
   float lower_bound;
   float upper_bound;
   float step;
-  Range(float l, float u, float s) : lower_bound(l), upper_bound(u), step(s) {}
+  Range(float l, float u, float s) : lower_bound(l), upper_bound(u), step(fmax(s, line2d_eps)) {}
   Range(float range_params[3])
       : lower_bound(range_params[0]), upper_bound(range_params[1]),
-        step(range_params[2]) {}
+        step(fmax(range_params[2], line2d_eps)) {}
 };
 
 struct Search {
   Range scale;
   Range angle;
-  Search() : scale(1, 1, 0), angle(0, 0, 0) {}
+  Search() : scale(1, 1, line2d_eps), angle(0, 0, line2d_eps) {}
   Search(Range _scale, Range _angle) : scale(_scale), angle(_angle) {}
+};
+
+/// Template Search Tree
+
+// 定义节点结构，包含区域范围和数据
+
+class TemplateSearch {
+public:
+  TemplateSearch() : rows(0), cols(0) {}
+
+  cv::Ptr<ShapeTemplate> & operator[] (int id) { return templates[id]; }
+
+  int size() { return templates.size(); }
+
+  std::vector<cv::Ptr<ShapeTemplate> > searchInRegion(float scale, float angle);
+
+  void build(const Search &search, ShapeTemplate &base);
+
+private:
+  int rows;
+  int cols;
+  Search region;
+  std::vector<cv::Ptr<ShapeTemplate> > templates;
 };
 
 /// ColorGradientPyramid
@@ -103,9 +120,9 @@ class ColorGradientPyramid {
 public:
   ColorGradientPyramid(const cv::Mat &_src, 
                        const cv::Mat &_mask,
-                       float _magnitude_threshold = 80.0f, 
-                       int count_kernel_size = 5,
-                       size_t _num_features = 100);
+                       float _magnitude_threshold = 50.0f, 
+                       int count_kernel_size = 3,
+                       size_t _num_features = 300);
 
   cv::Ptr<ColorGradientPyramid> process(const cv::Mat src,
                                         const cv::Mat &mask = cv::Mat()) const {
@@ -113,12 +130,15 @@ public:
   }
 
   void quantize(cv::Mat &dst) const {
-    angle.copyTo(dst, mask);
+    dst = cv::Mat::zeros(quantized_angle.size(), quantized_angle.type());
+    quantized_angle.copyTo(dst, mask);
   }
 
   bool extractTemplate(ShapeTemplate &templ) const;
 
   void pyrDown();
+
+  cv::Mat background() { return src.clone(); }
 
 private:
   inline void update();
@@ -144,23 +164,18 @@ struct Match {
   int x;
   int y;
   float similarity;
-  cv::String class_id;
-  int template_id;
-  Match(int _x, int _y, float _similarity, const cv::String &_class_id,
-        int _template_id)
-      : x(_x), y(_y), similarity(_similarity), class_id(_class_id),
-        template_id(_template_id) {}
+  cv::Ptr<ShapeTemplate> templ;
+
+  Match(int _x, int _y, float _similarity, cv::Ptr<ShapeTemplate> _template)
+      : x(_x), y(_y), similarity(_similarity), templ(_template) {}
 
   bool operator<(const Match &rhs) const {
-    if (similarity != rhs.similarity)
-      return similarity < rhs.similarity;
-    else
-      return template_id < rhs.template_id;
+    return similarity < rhs.similarity;
   }
 
   bool operator==(const Match &rhs) const {
-    return x == rhs.x && y == rhs.y && similarity == rhs.similarity &&
-           class_id == rhs.class_id;
+    return x == rhs.x && y == rhs.y && similarity == rhs.similarity 
+          && templ == rhs.templ;
   }
 };
 
@@ -172,10 +187,12 @@ public:
 
   LinearMemory(int _block_size)
     : block_size(_block_size) { 
-    memories = std::vector<std::vector<ushort>>(block_size * block_size, std::vector<ushort>());
+    memories.resize(block_size * block_size);
   }
 
   size_t linear_size() { return memories[0].size(); }
+
+  size_t size() { return memories.size() * memories[0].size(); }
 
   void create(size_t size, ushort value = 0) {
     for (int i = 0; i < (int)memories.size(); i++) 
@@ -214,11 +231,11 @@ private:
 
 class Detector {
 public:
+  Detector() : pyramid_level(1), block_size(4) {}
+
   void addSource(cv::Mat &src, cv::Mat mask = cv::Mat(), const cv::String &memory_name = "default");
 
-  void addTemplate(cv::Mat &object, cv::Mat object_mask = cv::Mat(), const Search &search = Search(), const cv::String &templ_name = "default");
-
-  void addSearch(Range scale, Range angle, const cv::String &search_name = "default");
+  void addTemplate(cv::Mat &object, cv::Mat object_mask = cv::Mat(), Search search = Search(), const cv::String &templ_name = "default");
 
   void match(cv::Mat &src, cv::Mat &object, 
              float score_threshold,
@@ -227,18 +244,21 @@ public:
              cv::Mat object_mask = cv::Mat());
 
   void matchClass(const cv::String &match_name, 
-                  const cv::String &search_name, float score_threshold);
+                  float score_threshold);
+
+  void nmsMatchPoints(std::vector<Match> &match_points, float threshold);
 
   void detectBestMatch(std::vector<cv::Vec6f> &points, std::vector<cv::RotatedRect> &boxs , const cv::String &match_name = "default");
+
+  void draw(cv::Mat background, const cv::String &match_name = "default");
 
 private:
   int pyramid_level;
   int block_size;
   cv::Ptr<ColorGradientPyramid> modality;
 
-  std::map<cv::String, std::vector<cv::Ptr<ShapeTemplate> > > templates_map;
+  std::map<cv::String, std::vector<TemplateSearch> > templates_map;
   std::map<cv::String, std::vector<LinearMemory> > memories_map;
-  std::map<cv::String, Search> searches_map;
   std::map<cv::String, std::vector<Match> >  matches_map;
 };
 } // namespace line2Dup

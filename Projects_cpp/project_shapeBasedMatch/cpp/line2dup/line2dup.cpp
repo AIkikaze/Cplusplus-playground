@@ -3,10 +3,44 @@ using namespace cv;
 using namespace std;
 using namespace line2Dup;
 
-/// debug
+class Timer {
+ public:
+  Timer() : beg_(clock_::now()) {}
+  void reset() { beg_ = clock_::now(); }
+  double elapsed() const {
+    return std::chrono::duration_cast<second_>(clock_::now() - beg_).count();
+  }
 
-void colormap(const Mat &quantized, Mat &dst) {
-  Vec3b colors[16];
+  void out(std::string message = "") {
+    double t = elapsed();
+    std::cout << message << "\nelasped time:" << t << "s\n" << std::endl;
+    reset();
+  }
+
+ private:
+  typedef std::chrono::high_resolution_clock clock_;
+  typedef std::chrono::duration<double, std::ratio<1>> second_;
+  std::chrono::time_point<clock_> beg_;
+};
+
+Mat background;
+
+/// debug
+void __onMouse(int event, int x, int y, int flags, void *userdata) {
+  if (event == cv::EVENT_LBUTTONDOWN) {
+    cv::Mat *image = static_cast<cv::Mat *>(userdata);
+    if (image != nullptr && !image->empty()) {
+      if (x >= 0 && x < image->cols && y >= 0 && y < image->rows) {
+        auto pixel = image->at<ushort>(y, x);
+        std::cout << "Pixel value at (" << x << ", " << y << "): " << pixel
+                  << std::endl;
+      }
+    }
+  }
+}
+
+inline Vec3b labelcolor(int label) {
+  static Vec3b colors[16];
 
   // Set 16 distinct color parameters
   colors[0] = Vec3b(255, 0, 0);      // Blue
@@ -26,6 +60,10 @@ void colormap(const Mat &quantized, Mat &dst) {
   colors[14] = Vec3b(255, 165, 0);   // Orange
   colors[15] = Vec3b(128, 0, 0);     // Brown
 
+  return colors[label];
+}
+
+void colormap(const Mat &quantized, Mat &dst) {
   dst = Mat::zeros(quantized.size(), CV_8UC3);
   for (int r = 0; r < dst.rows; r++) {
     const ushort *quad_r = quantized.ptr<ushort>(r);
@@ -33,7 +71,7 @@ void colormap(const Mat &quantized, Mat &dst) {
     for (int c = 0; c < dst.cols; c++) {
       for (int k = 0; k < 16; k++)
         if (quad_r[c] & (1 << k))
-          dst_r[c] = colors[k];
+          dst_r[c] = labelcolor(k);
     }
   }
 }
@@ -83,22 +121,22 @@ void ShapeTemplate::write(FileStorage &fs) const {
 }
 
 Ptr<ShapeTemplate> ShapeTemplate::relocate(float new_scale, float new_angle) {
-  Ptr<ShapeTemplate> ptp = makePtr<ShapeTemplate>(pyramid_level, scale * new_scale, angle - new_angle);
-  
-  if (abs(new_scale - 1.0) < line2d_eps && abs(new_angle - 0.0) < line2d_eps) {
+  Ptr<ShapeTemplate> ptp =
+      makePtr<ShapeTemplate>(pyramid_level, new_scale, new_angle);
+
+  float scaleFactor = new_scale / scale;
+  float angleFactor = new_angle - angle;
+  if (abs(scaleFactor - 1.0f) < line2d_eps && abs(angleFactor) < line2d_eps) {
     ptp->box = box;
-    ptp->features.resize(features.size());
-    for (int i = 0; i < (int)features.size(); i++)
-      ptp->features[i] = features[i];
+    ptp->features = features;
     return ptp;
   }
 
   // 对矩形选框进行旋转缩放
-  RotatedRect &tb = ptp->box;
   Point2f vertices[4];
   Point2f dstPoints[3];
-  tb.points(vertices);
-  Mat rotate_mat = getRotationMatrix2D(tb.center, new_scale, new_angle);
+  box.points(vertices);
+  Mat rotate_mat = getRotationMatrix2D(box.center, angleFactor, scaleFactor);
 
   // 只用选取 3 个顶点进行变换
   for (int i = 0; i < 3; i++) {
@@ -112,26 +150,97 @@ Ptr<ShapeTemplate> ShapeTemplate::relocate(float new_scale, float new_angle) {
   }
 
   // 更新矩形选框
-  RotatedRect new_box(dstPoints[0], dstPoints[1], dstPoints[2]);
-  tb = new_box;
+  ptp->box = RotatedRect(dstPoints[0], dstPoints[1], dstPoints[2]);
 
   // 对特征点序列进行旋转缩放
   vector<Gradient> &relocated_featrues = ptp->features;
-  vector<Gradient>::iterator it = features.begin(),
-                             it_end = features.end();
+  vector<Gradient>::iterator it = features.begin(), it_end = features.end();
 
   for (; it != it_end; it++) {
     double new_x = rotate_mat.at<double>(0, 0) * (*it).x +
-                   rotate_mat.at<double>(0, 1) * (*it).y +
-                   rotate_mat.at<double>(0, 2);
+                   rotate_mat.at<double>(0, 1) * (*it).y;
     double new_y = rotate_mat.at<double>(1, 0) * (*it).x +
-                   rotate_mat.at<double>(1, 1) * (*it).y +
-                   rotate_mat.at<double>(1, 2);
+                   rotate_mat.at<double>(1, 1) * (*it).y;
     float new_it_angle = fmod((*it).angle - new_angle + 360.0f, 360.0f);
-    relocated_featrues.push_back(Gradient(new_x, new_y, new_it_angle));
+    relocated_featrues.push_back(
+        Gradient(new_x + 0.5, new_y + 0.5, new_it_angle));
   }
 
   return ptp;
+}
+
+void line2Dup::ShapeTemplate::show_in(cv::Mat &background,
+                                      cv::Point new_center) {
+  static int base_size = 8;
+
+  // 平移旋转矩形到新的中心点位置
+  cv::RotatedRect translatedRect = box;
+  Point2f &center = translatedRect.center;
+  if (new_center.x > 0 && new_center.y > 0)
+    center = new_center;
+  // 增加边框
+  translatedRect.size.width += 10;
+  translatedRect.size.height += 10;
+  // 在图像上绘制旋转矩形
+  cv::Point2f vertices[4];
+  translatedRect.points(vertices);
+  for (int i = 0; i < 4; i++) {
+    cv::line(background, vertices[i], vertices[(i + 1) % 4], Scalar(255, 0, 0),
+             1);
+  }
+
+  for (const auto &f : features) {
+    cv::drawMarker(background, Point(f.x + center.x, f.y + center.y),
+                   labelcolor(f.label), cv::MARKER_SQUARE,
+                   base_size >> pyramid_level);
+  }
+  cv::drawMarker(background, center, cv::Scalar(0, 255, 0), cv::MARKER_DIAMOND,
+                 base_size >> pyramid_level);
+}
+
+void line2Dup::ShapeTemplate::show_in(cv::Mat &background,
+                                      vector<LinearMemory> &score_maps,
+                                      cv::Point new_center) {
+  static int base_size = 8;
+
+  // 平移旋转矩形到新的中心点位置
+  cv::RotatedRect translatedRect = box;
+  Point2f &center = translatedRect.center;
+  if (new_center.x > 0 && new_center.y > 0)
+    center = new_center;
+  // 增加边框
+  translatedRect.size.width += 10;
+  translatedRect.size.height += 10;
+  // 在图像上绘制旋转矩形
+  cv::Point2f vertices[4];
+  translatedRect.points(vertices);
+  for (int i = 0; i < 4; i++) {
+    cv::line(background, vertices[i], vertices[(i + 1) % 4], Scalar(255, 0, 0),
+             1);
+  }
+
+  // 定义自定义热力图的颜色映射
+  std::vector<cv::Scalar> heatmapColors = {
+      cv::Scalar(32, 32, 32),  // 灰色
+      cv::Scalar(255, 0, 0),   // 蓝色
+      cv::Scalar(255, 128, 0), // 浅蓝色
+      cv::Scalar(255, 255, 0), // 青色
+      cv::Scalar(0, 255, 0),   // 绿色
+      cv::Scalar(0, 255, 255), // 黄色
+      cv::Scalar(0, 128, 255), // 橙色
+      cv::Scalar(0, 0, 255),   // 红色
+      cv::Scalar(0, 0, 128)    // 深红色
+  };
+
+  for (const auto &f : features) {
+    const ushort &score_at_f =
+        score_maps[f.label].linear_at(f.y + center.y, f.x + center.x);
+    cv::drawMarker(background, Point(f.x + center.x, f.y + center.y),
+                   heatmapColors[score_at_f], cv::MARKER_SQUARE,
+                   base_size >> pyramid_level);
+  }
+  cv::drawMarker(background, center, cv::Scalar(0, 255, 0), cv::MARKER_DIAMOND,
+                 base_size >> pyramid_level);
 }
 
 void cropTemplate(ShapeTemplate &templ) {
@@ -140,13 +249,63 @@ void cropTemplate(ShapeTemplate &templ) {
     points[i] = Point2f(templ.features[i].x, templ.features[i].y);
 
   templ.box = minAreaRect(points);
-  int offset_x = templ.box.center.x;
-  int offset_y = templ.box.center.y;
+  int offset_x = templ.box.center.x + 0.5f;
+  int offset_y = templ.box.center.y + 0.5f;
 
   for (int i = 0; i < (int)templ.features.size(); i++) {
-    templ.features[i].x -= offset_x;
-    templ.features[i].y -= offset_y;
+    Gradient &point = templ.features[i];
+    point.x -= offset_x;
+    point.y -= offset_y;
   }
+}
+
+/// Templates Search
+
+vector<Ptr<ShapeTemplate>> TemplateSearch::searchInRegion(float scale,
+                                                          float angle) {
+  int y = (scale + region.scale.step - region.scale.lower_bound) /
+          region.scale.step - 1;
+  int x = (angle + region.angle.step - region.angle.lower_bound) /
+          region.angle.step - 1;
+
+  vector<Ptr<ShapeTemplate>> target_templates;
+
+  for (int r = max(0, y - 4); r < min(rows, y + 5); r++) {
+    for (int c = max(0, x - 4); c < min(cols, x + 5); c++) {
+      target_templates.push_back(templates[r * cols + c]);
+    }
+  }
+
+  return target_templates;
+}
+
+void TemplateSearch::build(const Search &search, ShapeTemplate &base) {
+  region = search;
+
+  for (float scale = search.scale.lower_bound;
+       scale < search.scale.upper_bound;
+       scale += search.scale.step) {
+    rows++;
+    for (float angle = search.angle.lower_bound;
+         angle < search.angle.upper_bound;
+         angle += search.angle.step) {
+      templates.push_back(base.relocate(scale, angle));
+      // Mat rotate_mat =
+      //     getRotationMatrix2D(base.box.center, angle, scale);
+      // Mat rotate_background(background.rows, background.cols,
+      //                       background.type());
+      // cv::warpAffine(background, rotate_background, rotate_mat,
+      //                rotate_background.size(), cv::INTER_LINEAR,
+      //                cv::BORDER_REPLICATE);
+      // templates.back()->show_in(rotate_background);
+      // namedWindow("template", WINDOW_NORMAL);
+      // imshow("template", rotate_background);
+      // // imwrite("template.jpg", rotate_background);
+      // waitKey();
+      // destroyWindow("template");
+    }
+  }
+  cols = templates.size() / rows;
 }
 
 /// class ColorGradientPyramid
@@ -159,14 +318,6 @@ ColorGradientPyramid::ColorGradientPyramid(const Mat &_src, const Mat &_mask,
       magnitude_threshold(_magnitude_threshold),
       count_kernel_size(_count_kernel_size), num_features(_num_features) {
   update();
-}
-
-inline int bit2label(const ushort &bit) {
-  for (int i = 0; i < 16; i++) {
-    if (bit & (1 << i))
-      return i;
-  }
-  return 0;
 }
 
 void selectScatteredFeatures(const vector<Candidate> &candidates,
@@ -209,7 +360,8 @@ bool ColorGradientPyramid::extractTemplate(ShapeTemplate &templ) const {
       if (no_mask || mask.at<uchar>(r, l)) {
         const float &angle_at_rl = angle.at<float>(r, l);
         const float &magnitude_at_rl = magnitude.at<float>(r, l);
-        if (angle_at_rl > 0 && magnitude_at_rl > magnitude_threshold) {
+        const ushort &quantized_at_rl = quantized_angle.at<ushort>(r, l);
+        if (quantized_at_rl > 0 && magnitude_at_rl > magnitude_threshold) {
           candidates.push_back(Candidate(l, r, angle_at_rl, magnitude_at_rl));
         }
       }
@@ -230,7 +382,7 @@ bool ColorGradientPyramid::extractTemplate(ShapeTemplate &templ) const {
 }
 
 void ColorGradientPyramid::pyrDown() {
-  num_features = num_features >> 2;
+  num_features = num_features >> 1;
   pyramid_level++;
 
   Size size(src.cols >> 1, src.rows >> 1);
@@ -264,6 +416,7 @@ static void quantizeAngle(Mat &magnitude, Mat &angle, Mat &quantized_angle,
   int dx[kernel_size], dy[kernel_size];
   int total_kernel = kernel_size * kernel_size;
   int NEIGHBOR_THRESHOLD = total_kernel / 2 + 1;
+
   for (int i = 0; i < kernel_size; i++)
     dx[i] = dy[i] = -(kernel_size / 2) + i;
 
@@ -272,21 +425,27 @@ static void quantizeAngle(Mat &magnitude, Mat &angle, Mat &quantized_angle,
     for (int c = 0; c < angle.cols; c++) {
       if (mag_r[c] <= threshold)
         continue;
+
       int count[16] = {0};
       int index = -1;
       int max_votes = 0;
+
       for (int i = 0; i < total_kernel; i++) {
-        int u = r + dy[i / 3], v = c + dx[i % 3];
+        int u = r + dy[i / kernel_size], v = c + dx[i % kernel_size];
         if (u < 0 || v < 0 || u >= angle.rows || v >= angle.cols)
           continue;
-        int cur_label = quanized_unfiltered.at<uchar>(u, v);
-        if (++count[cur_label] > max_votes) {
-          max_votes = count[cur_label];
-          index = cur_label;
+        count[quanized_unfiltered.at<uchar>(u, v)]++;
+      }
+
+      for (int ori = 0; ori < QUANTIZE_BASE; ori++) {
+        if (count[ori] > max_votes) {
+          max_votes = count[ori];
+          index = ori;
         }
       }
+
       if (max_votes >= NEIGHBOR_THRESHOLD)
-        quantized_angle.at<ushort>(r, c) = (1 << index);
+        quantized_angle.at<ushort>(r, c) = ushort(1 << index);
     }
   }
 }
@@ -310,31 +469,47 @@ static void sobelMagnitude(const Mat &src, Mat &magnitude, Mat &sobel_dx,
   Sobel(smoothed, sobel_3dx, CV_16S, 1, 0, 3, 1.0, 0, BORDER_REPLICATE);
   Sobel(smoothed, sobel_3dy, CV_16S, 0, 1, 3, 1.0, 0, BORDER_REPLICATE);
 
-  for (int i = 0; i < size.height; i++) {
-    for (int j = 0; j < size.width; j++) {
-      int maxMagnitude = 0;
-      int index = 0;
-      // suitable of 3 or 1 channel img
-      for (int c = 0; c < smoothed.channels(); c++) {
-        short &dx = sobel_3dx.at<Vec3s>(i, j)[c];
-        short &dy = sobel_3dy.at<Vec3s>(i, j)[c];
-        int mag_c = dx * dx + dy * dy;
-        if (mag_c > maxMagnitude) {
-          maxMagnitude = mag_c;
-          index = c;
-        }
+  if (smoothed.channels() == 1) {
+    for (int i = 0; i < size.height; i++) {
+      for (int j = 0; j < size.width; j++) {
+        sobel_dx.at<float>(i, j) = sobel_3dx.at<ushort>(i, j);
+        sobel_dy.at<float>(i, j) = sobel_3dy.at<ushort>(i, j);
       }
-      sobel_dx.at<float>(i, j) = sobel_3dx.at<Vec3s>(i, j)[index];
-      sobel_dy.at<float>(i, j) = sobel_3dy.at<Vec3s>(i, j)[index];
-      magnitude.at<float>(i, j) = maxMagnitude;
+    }
+    cv::magnitude(sobel_dx, sobel_dy, magnitude);
+  } else {
+    for (int i = 0; i < size.height; i++) {
+      for (int j = 0; j < size.width; j++) {
+        int maxMagnitude = 0;
+        int index = 0;
+        // suitable of 3 or 1 channel img
+        for (int c = 0; c < smoothed.channels(); c++) {
+          short &dx = sobel_3dx.at<cv::Vec3s>(i, j)[c];
+          short &dy = sobel_3dy.at<cv::Vec3s>(i, j)[c];
+          int mag_c = dx * dx + dy * dy;
+          if (mag_c > maxMagnitude) {
+            maxMagnitude = mag_c;
+            index = c;
+          }
+        }
+        sobel_dx.at<float>(i, j) = sobel_3dx.at<cv::Vec3s>(i, j)[index];
+        sobel_dy.at<float>(i, j) = sobel_3dy.at<cv::Vec3s>(i, j)[index];
+        magnitude.at<float>(i, j) = maxMagnitude;
+      }
     }
   }
+
   normalize(magnitude, magnitude, 0, 100.0f, NORM_MINMAX, CV_32F);
 }
 
 void ColorGradientPyramid::update() {
   Mat sobel_dx, sobel_dy;
   sobelMagnitude(src, magnitude, sobel_dx, sobel_dy);
+  // Mat magnitude_image;
+  // normalize(magnitude, magnitude_image, 0, 255, NORM_MINMAX, CV_8U);
+  // namedWindow("magnitude");
+  // imshow("magnitude", magnitude_image);
+  // waitKey();
 
   phase(sobel_dx, sobel_dy, angle, true);
 
@@ -343,30 +518,30 @@ void ColorGradientPyramid::update() {
 }
 
 void LinearMemory::linearize(cv::Mat &src) {
-  int new_rows = (src.rows / block_size + 1) * block_size;
-  int new_cols = (src.cols / block_size + 1) * block_size;
-  Mat bordered_src;
-  copyMakeBorder(src, bordered_src, 0, new_rows - src.rows, 0,
-                 new_cols - src.cols, BORDER_REPLICATE);
+  int new_rows = (src.rows / block_size) * block_size;
+  int new_cols = (src.cols / block_size) * block_size;
+  Mat bordered_src = src(Rect(0, 0, new_cols, new_rows));
+  // copyMakeBorder(src, bordered_src, 0, new_rows - src.rows, 0,
+  //                new_cols - src.cols, BORDER_CONSTANT);
 
   // CV_Assert(src.rows % block_size == 0);
   // CV_Assert(src.cols % block_size == 0);
 
-  rows = src.rows / block_size;
-  cols = src.cols / block_size;
+  rows = bordered_src.rows / block_size;
+  cols = bordered_src.cols / block_size;
   create(rows * cols);
 
   for (int r = 0; r < new_rows; r++) {
     for (int c = 0; c < new_cols; c++) {
       int order_block = (r % block_size) * block_size + (c % block_size);
       int idx_mat = (r / block_size) * cols + (c / block_size);
-      memories[order_block][idx_mat] = src.at<ushort>(r, c);
+      memories[order_block][idx_mat] = src.at<uchar>(r, c);
     }
   }
 }
 
 void LinearMemory::unlinearize(cv::Mat &dst) {
-  dst.create(Size(rows * block_size, cols * block_size), CV_16U);
+  dst.create(Size(cols * block_size, rows * block_size), CV_16U);
 
   for (int r = 0; r < dst.rows; r++) {
     for (int l = 0; l < dst.cols; l++) {
@@ -386,9 +561,9 @@ static void spread(Mat &src, Mat &dst, int kernel_size) {
           int u = i + dy;
           int v = j + dx;
           if (u < 0 || u >= src.rows || v < 0 || v >= src.cols ||
-              !src.at<quantize_type>(u, v))
+              src.at<quantize_type>(u, v) == 0)
             continue;
-          dst.at<quantize_type>(i, j) |= dst.at<quantize_type>(u, v);
+          dst.at<quantize_type>(i, j) |= src.at<quantize_type>(u, v);
         }
       }
     }
@@ -400,8 +575,8 @@ const int bit_mask[] = {15, 240, 3840, 61440};
 
 static void computeResponseMaps(Mat &src, vector<Mat> &response_maps) {
   response_maps.resize(QUANTIZE_BASE);
-  for (int i = 0; i < 16; i++)
-    response_maps[i] = Mat::zeros(src.size(), CV_16U);
+  for (int i = 0; i < QUANTIZE_BASE; i++)
+    response_maps[i] = Mat::zeros(src.size(), CV_8U);
 
   static int bit_size = QUANTIZE_BASE / 4;
   static int lut_step = bit_size * QUANTIZE_BASE;
@@ -411,16 +586,32 @@ static void computeResponseMaps(Mat &src, vector<Mat> &response_maps) {
       if (!src.at<quantize_type>(i, j))
         continue;
 
+      // std::cout << bitset<16>(src.at<quantize_type>(i, j)) << endl;
+
       uchar _bit_[bit_size];
       for (int k = 0; k < bit_size; k++)
-        _bit_[k] = src.at<quantize_type>(i, j) & bit_mask[k];
+        _bit_[k] = (src.at<quantize_type>(i, j) & bit_mask[k]) >> (4 * k);
+
+      // for (int k = 0; k < bit_size; k++)
+      //   std::cout << "[" << k << "]: " << bitset<4>(_bit_[k]) << endl;
 
       for (int ori = 0; ori < QUANTIZE_BASE; ori++) {
         uchar maxScore = 0;
-        for (int k = 0; k < bit_size; k++)
+
+        // std::cout << "orientation: " << endl << bitset<16>(1 << ori) << endl;
+        // std::cout << bitset<16>(src.at<quantize_type>(i, j)) << endl;
+        for (int k = 0; k < bit_size; k++) {
+          // std::cout << "[" << k << "]: " << bitset<4>(_bit_[k]) << " - " <<
+          // 16 * k + (int)_bit_[k]
+          //           << " -> " << (int)similarity_lut[ori * lut_step + 16 * k
+          //           + (int)_bit_[k]] << endl;
+          // std::cin.get();
           maxScore =
-              max(maxScore, similarity_lut[ori * lut_step + 16 * k + _bit_[k]]);
-        response_maps[ori].at<quantize_type>(i, j) = maxScore;
+              max(maxScore,
+                  similarity_lut[ori * lut_step + 16 * k + (int)_bit_[k]]);
+        }
+
+        response_maps[ori].at<uchar>(i, j) = maxScore;
       }
     }
   }
@@ -442,22 +633,38 @@ void Detector::addSource(cv::Mat &src, cv::Mat mask,
   vector<LinearMemory> memories_pyramid;
 
   for (int l = 0; l < pyramid_level; l++) {
-    vector<LinearMemory> linear_memories;
     for (int i = 0; i < QUANTIZE_BASE; i++)
-      linear_memories.push_back(LinearMemory(block_size));
+      memories_pyramid.push_back(LinearMemory(block_size));
 
     Mat quantized, spread_quantized;
     modality->quantize(quantized);
-    spread(quantized, spread_quantized, 3);
+    // Mat quantizedImage;
+    // colormap(quantized, quantizedImage);
+    // imshow("quantized", quantizedImage);
+    // waitKey();
+    // destroyWindow("quantized");
+
+    spread(quantized, spread_quantized, 5);
+    // Mat spreadImage;
+    // colormap(spread_quantized, spreadImage);
+    // imshow("spread", spreadImage);
+    // imwrite("spread.jpg", spreadImage);
+    // waitKey();
+    // destroyWindow("spread");
 
     vector<Mat> response_maps;
     computeResponseMaps(spread_quantized, response_maps);
+    // for (int i = 0; i < (int)response_maps.size(); i++) {
+    //   Mat response_mat;
+    //   normalize(response_maps[i], response_mat, 0, 255, NORM_MINMAX, CV_8U);
+    //   namedWindow("response_map", WINDOW_NORMAL);
+    //   imshow("response_map", response_mat);
+    //   waitKey();
+    //   destroyWindow("response_map");
+    // }
 
     for (int i = 0; i < QUANTIZE_BASE; i++)
-      linear_memories[i].linearize(response_maps[i]);
-
-    memories_pyramid.insert(memories_pyramid.end(), linear_memories.begin(),
-                            linear_memories.end());
+      memories_pyramid[l * QUANTIZE_BASE + i].linearize(response_maps[i]);
 
     if (l != pyramid_level - 1)
       modality->pyrDown();
@@ -466,8 +673,8 @@ void Detector::addSource(cv::Mat &src, cv::Mat mask,
   memories_map.insert(make_pair(memory_name, memories_pyramid));
 }
 
-void Detector::addTemplate(cv::Mat &object, cv::Mat object_mask,
-                          const Search &search, const cv::String &templ_name) {
+void Detector::addTemplate(cv::Mat &object, cv::Mat object_mask, Search search,
+                           const cv::String &templ_name) {
   auto named_templ = templates_map.find(templ_name);
   if (named_templ != templates_map.end()) {
     printf("该名称被占用! 是否重新写入模板 [y/n]\n");
@@ -480,44 +687,27 @@ void Detector::addTemplate(cv::Mat &object, cv::Mat object_mask,
 
   modality = modality->process(object, object_mask);
 
-  vector<Ptr<ShapeTemplate> > templs;
-
-  const Range &scale_range = search.scale;
-  const Range &angle_range = search.angle;
+  vector<TemplateSearch> templ_pyramid;
 
   for (int l = 0; l < pyramid_level; l++) {
-    ShapeTemplate origin_tmepl(l, 1.0f, 0.0f);
-    modality->extractTemplate(origin_tmepl);
+    vector<Ptr<ShapeTemplate>> templs;
+    ShapeTemplate templ(l, 1.0f, 0.0f);
+    modality->extractTemplate(templ);
+    background = modality->background();
 
-    for (float scale = scale_range.lower_bound;
-         scale < scale_range.upper_bound + line2d_eps; scale += scale_range.step) {
-      for (float angle = angle_range.lower_bound;
-           angle < angle_range.upper_bound + line2d_eps; angle += angle_range.step) {
-        templs.push_back(origin_tmepl.relocate(scale, angle));
-      }
-    }
+    TemplateSearch tp_search;
+    tp_search.build(search, templ);
+
+    templ_pyramid.push_back(tp_search);
+
+    search.angle.step += search.angle.step;
+    search.scale.step += search.scale.step;
 
     if (l != pyramid_level - 1)
       modality->pyrDown();
   }
 
-  templates_map.insert(make_pair(templ_name, templs));
-  addSearch(scale_range, angle_range, templ_name);
-}
-
-void Detector::addSearch(Range scale, Range angle,
-                         const cv::String &search_name) {
-  auto named_search = searches_map.find(search_name);
-  if (named_search != searches_map.end()) {
-    printf("该名称被占用! 是否重新写入搜索范围 [y/n]\n");
-    char ch = getchar();
-    if (ch == 'y' || ch == 'Y')
-      ;
-    else if (ch == 'n' || ch == 'N')
-      return;
-  }
-
-  searches_map.insert(make_pair(search_name, Search(scale, angle)));
+  templates_map.insert(make_pair(templ_name, templ_pyramid));
 }
 
 static void computeSimilarity(LinearMemory *response_map,
@@ -529,6 +719,7 @@ static void computeSimilarity(LinearMemory *response_map,
 
   int size = similarity.block_size * similarity.block_size;
 
+  #pragma omp parallel for
   for (int i = 0; i < size; i++) {
     for (const auto &point : templ.features) {
       Point cur = Point(point.x + i % 4, point.y + i / 4);
@@ -536,7 +727,8 @@ static void computeSimilarity(LinearMemory *response_map,
       int mod_y = cur.y % 4 < 0 ? (cur.y % 4) + 4 : cur.y % 4;
       int mod_x = cur.x % 4 < 0 ? (cur.x % 4) + 4 : cur.x % 4;
 
-      int offset = ((cur.y - mod_y) / 4) * similarity.cols + (cur.x - mod_x) / 4;
+      int offset =
+          ((cur.y - mod_y) / 4) * similarity.cols + (cur.x - mod_x) / 4;
 
       for (int j = 0; j < similarity.linear_size(); j++) {
         similarity.at(i, j) +=
@@ -547,19 +739,25 @@ static void computeSimilarity(LinearMemory *response_map,
 }
 
 static void addLocalSimilarity(LinearMemory *response_map,
-                              const ShapeTemplate &templ,
-                              LinearMemory &similarity, int x, int y) {
+                               const ShapeTemplate &templ,
+                               LinearMemory &similarity, int x, int y) {
   int n_rows = similarity.rows * 4;
   int n_cols = similarity.cols * 4;
-  for (int i = y - 8; i < y + 8; y++) {
-    for (int j = x - 8; j < x + 8; j++) {
+
+  for (int i = y - 8; i <= y + 8; i++) {
+    for (int j = x - 8; j <= x + 8; j++) {
+      // if (visited[i * n_cols + j])
+      //   continue;
+      // visited[i * n_cols + j] = true;
+      #pragma omp parallel for
       for (const auto &point : templ.features) {
         Point cur = Point(point.x + j, point.y + i);
 
         if (cur.y < 0 || cur.x < 0 || cur.y >= n_rows || cur.x >= n_cols)
           continue;
 
-        similarity.linear_at(i, j) += response_map->linear_at(cur.y, cur.x);
+        similarity.linear_at(i, j) +=
+            response_map[point.label].linear_at(cur.y, cur.x);
       }
     }
   }
@@ -572,115 +770,225 @@ struct MatchPredicate {
   bool operator()(const Match &m) { return m.similarity < threshold; }
 };
 
-void Detector::match(cv::Mat &src, cv::Mat &object, 
-                     float score_threshold,
-                     const Search &search,
-                     cv::Mat src_mask, cv::Mat object_mask) {
+void Detector::match(cv::Mat &src, cv::Mat &object, float score_threshold,
+                     const Search &search, cv::Mat src_mask,
+                     cv::Mat object_mask) {
+  Timer time;
   int area = sqrt(object.rows * object.cols);
-  int try_level = 1;
-  while (128 * (1 << try_level) < area)
-    try_level++;
-  pyramid_level = try_level;
+  // int try_level = 1;
+  // while (64 * (1 << try_level) < area)
+  //   try_level++;
+  pyramid_level = 3;
+
+  std::cout << "pyramid level: " << pyramid_level << endl;
+
 
   addSource(src, src_mask);
-  addTemplate(object, object_mask, search);
+  time.out("__ 源图像初始化完成! __");
 
-  matchClass("default", "default", score_threshold);
+  addTemplate(object, object_mask, search);
+  time.out("__ 模板加载完成! __");
+
+  matchClass("default", score_threshold);
+  time.out("__ 模板匹配计算完成! __");
+
+  draw(src, "default");
 }
 
-void Detector::matchClass(const cv::String &match_name,
-                          const cv::String &search_name, float score_threshold) {
-  vector<Ptr<ShapeTemplate> > &vtp = templates_map[match_name];
-  vector<LinearMemory> &vlm = memories_map[match_name];
-  vector<Match> matches;
-  int num_templates = vtp.size() / pyramid_level;
+void Detector::nmsMatchPoints(vector<Match> &match_points, float threshold) {
+  if (match_points.empty())
+    return;
 
-  for (int template_id = 0; template_id < num_templates; template_id++) {
-    int match_level = pyramid_level - 1;
-    Ptr<ShapeTemplate> templ = vtp[match_level * num_templates + template_id];
-    LinearMemory *response_map_begin = &vlm[match_level * QUANTIZE_BASE];
+  stable_sort(match_points.begin(), match_points.end(),
+              [](const Match &a, const Match &b) {
+                return a.similarity < b.similarity;
+              });
 
-    LinearMemory similarity(block_size);
-    computeSimilarity(response_map_begin, *templ, similarity);
+  vector<Match> filtered_points;
 
-    int num_features = (*templ).features.size();
-    int raw_threshold = static_cast<int>(4 * num_features + 
-                        (score_threshold / 100.0f) * (4 * num_features) + 0.5f);
+  for (int i = 0; i < (int)match_points.size(); i++) {
+    bool keep = true;
+    // ShapeTemplate *temp_i = match_points[i].templ;
 
-    vector<Match> candidates;
-    for (int r = 0; r < similarity.rows; r++) {
-      for (int c = 0; c < similarity.cols; c++) {
-        int raw_score = similarity.linear_at(r, c);
-        if (raw_score > raw_threshold) {
-          float score = (raw_score * 100.0f) / (8 * num_features) + 0.5f;
-          candidates.push_back(Match(c, r, score, match_name, template_id));
-        }
+    for (int j = i + 1; j < (int)match_points.size(); j++) {
+      // ShapeTemplate *temp_j = match_points[j].templ;
+      // 计算当前点与比较点之间的差异
+      float dx = match_points[i].x - match_points[j].x;
+      float dy = match_points[i].y - match_points[j].y;
+      // float dscale = temp_i->scale - temp_j->scale;
+      // float dangle = temp_i->angle - temp_j->angle;
+
+      // 计算距离或重叠度量
+      float distance = std::sqrt(dx * dx + dy * dy) / 2;
+      // float diffScale = std::abs(dscale) * 0.02;
+      // float diffAngle = std::abs(dangle) * 0.2;
+
+      // 根据阈值判断是否保留当前点
+      if (distance < threshold) {
+        keep = false;
+        break;
       }
     }
 
-    for (int l = match_level - 1; l >= 0; l--) {
-      Ptr<ShapeTemplate> templ = vtp[match_level * num_templates + template_id];
-      LinearMemory *response_map_begin = &vlm[match_level * QUANTIZE_BASE];
+    if (keep)
+      filtered_points.push_back(match_points[i]);
+  }
 
-      LinearMemory local_similarity(block_size);
-      local_similarity.create(response_map_begin->linear_size(), 0);
-      local_similarity.rows = response_map_begin->rows;
-      local_similarity.cols = response_map_begin->cols;
-      for (int k = 0; k < (int)candidates.size(); k++) {
-        Match &point = candidates[k];
-        int x = point.x * 2;
-        int y = point.y * 2;
+  match_points = filtered_points;
+}
 
+void Detector::matchClass(const cv::String &match_name, float score_threshold) {
+  vector<TemplateSearch> &templates_pyramid = templates_map[match_name];
+  vector<LinearMemory> &response_pyramid = memories_map[match_name];
+  vector<Match> matches;
+
+  int first_match = pyramid_level - 1;
+  TemplateSearch &templates = templates_pyramid[first_match];
+  int num_templates = templates.size();
+
+  for (int id = 0; id < num_templates; id++) {
+    Ptr<ShapeTemplate> templ = templates[id];
+    LinearMemory *response_map_begin =
+        &response_pyramid[first_match * QUANTIZE_BASE];
+
+    LinearMemory similarity(block_size);
+    computeSimilarity(response_map_begin, *templ, similarity);
+    // Mat similarityMat, similarityImage;
+    // similarity.unlinearize(similarityMat);
+    // normalize(similarityMat, similarityImage, 0, 255, NORM_MINMAX, CV_8U);
+    // namedWindow("similarity");
+    // imshow("similarity", similarityImage);
+    // setMouseCallback("similarity", __onMouse, &similarityMat);
+    // waitKey();
+    // destroyWindow("similarity");
+
+    int num_features = templ->features.size();
+    int raw_threshold =
+        static_cast<int>((score_threshold / 100.0f) * (8 * num_features));
+
+    for (int r = 0; r < similarity.rows * similarity.block_size; r++) {
+      for (int c = 0; c < similarity.cols * similarity.block_size; c++) {
+        int raw_score = similarity.linear_at(r, c);
+        if (raw_score > raw_threshold) {
+          float score = (raw_score * 100.0f) / (8 * num_features);
+          matches.push_back(Match(c, r, score, templ));
+        }
+      }
+    }
+  }
+
+  nmsMatchPoints(matches, 32.0f / ( 2 * pyramid_level) );
+
+  // Filter out any matches that drop below the similarity threshold
+  std::vector<Match>::iterator new_end = std::remove_if(
+      matches.begin(), matches.end(), MatchPredicate(score_threshold));
+  matches.erase(new_end, matches.end());
+  
+  for (int l = first_match - 1; l >= 0; l--) {
+    LinearMemory *response_map_begin = &response_pyramid[l * QUANTIZE_BASE];
+
+    for (int i = 0; i < (int)matches.size(); i++) {
+      Match &point = matches[i];
+      float &scale = point.templ->scale;
+      float &angle = point.templ->angle;
+
+      // cout << "scale -> " << scale << endl;
+      // cout << "angle -> " << angle << endl;
+
+      vector<Ptr<ShapeTemplate>> matched_templates =
+          templates_pyramid[l].searchInRegion(scale, angle);
+
+      int x = point.x * 2;
+      int y = point.y * 2;
+
+      vector<Match> candidates;
+      for (int id = 0; id < (int)matched_templates.size(); id++) {
+        Ptr<ShapeTemplate> templ = matched_templates[id];
+        // cout << "template [" << id + 1 << "]" << endl;
+        // cout << "scale -> " << templ->scale << endl;
+        // cout << "angle -> " << templ->angle << endl;
+        int num_features = templ->features.size();
+
+        LinearMemory local_similarity(block_size);
+        local_similarity.create(response_map_begin->linear_size(), 0);
+        local_similarity.rows = response_map_begin->rows;
+        local_similarity.cols = response_map_begin->cols;
+        // vector<bool> visited(local_similarity.size(), false);
+        
         addLocalSimilarity(response_map_begin, *templ, local_similarity, x, y);
 
         int best_score = 0;
         Point best_match(-1, -1);
-        for (int r = 0; r < local_similarity.rows; r++) {
-          for (int l = 0; l < local_similarity.cols; l++) {
-            int score = local_similarity.linear_at(r, l);
+        for (int r = y - 8; r < y + 9; r++) {
+          for (int c = x - 8; c < x + 9; c++) {
+            int score = local_similarity.linear_at(r, c);
             if (score > best_score) {
               best_score = score;
-              best_match = Point(l, r);
+              best_match = Point(c, r);
             }
           }
         }
 
-        point.x = best_match.x;
-        point.y = best_match.y;
-        point.similarity = (best_score * 100.0f) / (8 * num_features);
+        candidates.emplace_back(best_match.x, best_match.y, (best_score * 100.0f) / (8 * num_features), templ);
+        // point.x = best_match.x;
+        // point.y = best_match.y;
+        // point.similarity = (best_score * 100.0f) / (8 * num_features);
+        // point.templ = templ;
+        // cout << "-------- match_point --------" << endl;
+        // cout << "x -> " << point.x << endl;
+        // cout << "y -> " << point.y << endl;
+        // cout << "similarity -> " << point.similarity << endl;
+        // cout << 
+        // cout << "******** match_point ********" << endl;
       }
-
-      // Filter out any matches that drop below the similarity threshold
-      vector<Match>::iterator new_end = remove_if(
-          candidates.begin(), candidates.end(), MatchPredicate(score_threshold));
-      candidates.erase(new_end, candidates.end());
+      stable_sort(candidates.begin(), candidates.end());
+      point = candidates.back();
     }
-
-    matches.insert(matches.end(), candidates.begin(), candidates.end());
+    // Filter out any matches that drop below the similarity threshold
+    std::vector<Match>::iterator new_end = std::remove_if(
+        matches.begin(), matches.end(), MatchPredicate(score_threshold));
+    matches.erase(new_end, matches.end());
   }
+
+  nmsMatchPoints(matches, 8.0f);
 
   matches_map.insert(make_pair(match_name, matches));
 }
 
-void Detector::detectBestMatch(vector<Vec6f> &points, 
+void Detector::detectBestMatch(vector<Vec6f> &points,
                                vector<RotatedRect> &boxes,
                                const String &match_name) {
-  vector<Ptr<ShapeTemplate> > &vtp = templates_map[match_name];
   vector<Match> &matches = matches_map[match_name];
 
-  vector<bool> count(vtp.size() / pyramid_level, false);
   points.resize(matches.size());
+  boxes.resize(matches.size());
 
   for (int i = 0; i < (int)points.size(); i++) {
-    int temp_id = matches[i].template_id;
-    if (!count[temp_id]) {
-      boxes.push_back(vtp[temp_id]->box);
-      count[temp_id] = true;
-    }
     points[i][0] = matches[i].x;
     points[i][1] = matches[i].y;
-    points[i][2] = vtp[temp_id]->scale;
-    points[i][3] = vtp[temp_id]->angle;
+    points[i][2] = matches[i].templ->scale;
+    points[i][3] = matches[i].templ->angle;
     points[i][4] = matches[i].similarity;
+    boxes[i] = matches[i].templ->box;
   }
+}
+
+void Detector::draw(cv::Mat background, const cv::String &match_name) {
+  for (const auto &point : matches_map[match_name]) {
+    point.templ->show_in(background, memories_map[match_name],
+                         Point(point.x, point.y));
+    cv::Vec3b randColor;
+    randColor[0] = rand() % 155 + 100;
+    randColor[1] = rand() % 155 + 100;
+    randColor[2] = rand() % 155 + 100;
+    cv::putText(background, to_string(int(round(point.similarity))),
+                cv::Point(point.x - 10, point.y - 3), cv::FONT_HERSHEY_PLAIN, 4,
+                randColor);
+  }
+  if (matches_map[match_name].empty())
+    cerr << "没有找到匹配点!" << endl;
+  cv::namedWindow("matchImage", cv::WINDOW_NORMAL);
+  cv::imshow("matchImage", background);
+  cv::waitKey();
+  cv::destroyWindow("matchImage");
 }

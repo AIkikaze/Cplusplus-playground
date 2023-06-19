@@ -13,7 +13,7 @@
 #include <vector>
 
 class Timer {
-public:
+ public:
   Timer() : beg_(clock_::now()) {}
   void reset() { beg_ = clock_::now(); }
   double elapsed() const {
@@ -25,7 +25,7 @@ public:
     reset();
   }
 
-private:
+ private:
   typedef std::chrono::high_resolution_clock clock_;
   typedef std::chrono::duration<double, std::ratio<1>> second_;
   std::chrono::time_point<clock_> beg_;
@@ -38,7 +38,7 @@ namespace line2d {
 
 /// @brief 图像金字塔
 class ImagePyramid {
-public:
+ public:
   ImagePyramid();
 
   ImagePyramid(const cv::Mat &src, int py_level);
@@ -50,20 +50,21 @@ public:
   /// @param pyramid_level 金字塔最高层数evels
   void buildPyramid(const cv::Mat &src, int pyramid_level = 0);
 
-private:
-  int pyramid_level; // 图像金字塔层级
-  std::vector<cv::Mat> pyramid; // 图像 vector 序列: 最底层为裁剪后的原始图像,
-                                // 最高层为缩放 1<<pyramid_level 倍的图像
+ private:
+  int pyramid_level;  // 图像金字塔层级
+  std::vector<cv::Mat> masks;
+  std::vector<cv::Mat> pyramid;  // 图像 vector 序列: 最底层为裁剪后的原始图像,
+                                 // 最高层为缩放 1<<pyramid_level 倍的图像
 };
 
 /// @brief 形状日志生成器
 class shapeInfo_producer {
-public:
-  std::array<float, 2> angle_range; // 角度范围
-  std::array<float, 2> scale_range; // 缩放系数范围
-  float angle_step;                 // 角度步长
-  float scale_step;                 // 缩放系数步长
-  float eps;                        // 搜索精度
+ public:
+  std::array<float, 2> angle_range;  // 角度范围
+  std::array<float, 2> scale_range;  // 缩放系数范围
+  float angle_step;                  // 角度步长
+  float scale_step;                  // 缩放系数步长
+  float eps;                         // 搜索精度
 
   /// @brief 日志结构体, 含旋转角和缩放系数两个参数
   struct Info {
@@ -98,10 +99,9 @@ public:
   /// @param padding
   /// @param path
   /// @return
-  static cv::Ptr<shapeInfo_producer>
-  load_config(const cv::Mat &input_src, cv::Mat input_mask = cv::Mat(),
-              bool padding = false,
-              std::string path = "../data/sip_config.yaml");
+  static cv::Ptr<shapeInfo_producer> load_config(
+      const cv::Mat &input_src, cv::Mat input_mask = cv::Mat(),
+      bool padding = false, std::string path = "../data/sip_config.yaml");
 
   /// @brief 按当前设置读入形状日志
   void produce_infos();
@@ -128,10 +128,10 @@ public:
   /// @return 类中的私有日志列表 Infos
   const std::vector<shapeInfo_producer::Info> &Infos_constptr() const;
 
-private:
-  std::vector<shapeInfo_producer::Info> Infos; // 日志列表
-  cv::Mat src;                                 // 模板图像矩阵
-  cv::Mat mask;                                // 模板对应掩图矩阵
+ private:
+  std::vector<shapeInfo_producer::Info> Infos;  // 日志列表
+  cv::Mat src;                                  // 模板图像矩阵
+  cv::Mat mask;                                 // 模板对应掩图矩阵
 
   /// @brief
   /// @return
@@ -142,36 +142,34 @@ inline int angle2ori(const float &angle);
 
 inline float ori2angle(const int &orientation);
 
-#define angle2label(x) (static_cast<int>(x * 32.0 / 360.0) & 15)
-
 class Template {
-public:
+ public:
   struct Feature {
-    int x;
-    int y;
-    int label;   // 特征方向角量化后的标签 0~15
-    float angle; // 特征方向角度 0~360
-    float score; // 梯度模长(已归一化)
-    Feature(int _x, int _y, float _angle, float _score)
-        : x(_x), y(_y), label(angle2label(_angle)), angle(_angle),
-          score(_score) {}
-    bool operator<(const Feature &rhs) const { // 按梯度模长进行排序
-      return score < rhs.score;
+    cv::Point p_xy;   // 特征点坐标
+    float angle;      // 特征方向角度 0~360
+    float grad_norm;  // 梯度模长(已归一化)
+    int orientation;  // 特征方向角量化后的标签 0~15
+    Feature(cv::Point xy, float angle, float grad)
+        : p_xy(xy), angle(angle), grad_norm(grad) {}
+    bool operator<(const Feature &rhs) const {  // 按梯度模长进行排序
+      return grad_norm > rhs.grad_norm;
     }
   };
 
   struct TemplateParams {
     int num_features;
-    float magnitude_threshold;
+    float grad_norm;
     bool template_created;
     int nms_kernel_size;
+    float scatter_distance;
     bool isDefault;
 
     TemplateParams() {
       num_features = 200;
-      magnitude_threshold = 0.2f;
+      grad_norm = 20;
       template_created = false;
       nms_kernel_size = 7;
+      scatter_distance = 10.0f;
       isDefault = true;
     }
 
@@ -181,9 +179,10 @@ public:
         return *this;
       }
       num_features = other.num_features;
-      magnitude_threshold = other.magnitude_threshold;
+      grad_norm = other.grad_norm;
       template_created = other.template_created;
       nms_kernel_size = other.nms_kernel_size;
+      scatter_distance = other.scatter_distance;
       isDefault = false;
       return *this;
     }
@@ -193,57 +192,59 @@ public:
 
   Template(TemplateParams params, bool isDefault = false);
 
-  static bool createTemplate(const cv::Mat &src, Template &tp,
-                             int kernel_size = 3);
+  static void getOriMat(const cv::Mat &src, cv::Mat &edges, cv::Mat &angles);
 
-  static cv::Ptr<Template>
-  createPtr_from(const cv::Mat &src, TemplateParams params = TemplateParams());
+  static void createTemplate(const cv::Mat &src, Template &tp,
+                             int kernel_size = 3,
+                             float scatter_distance = 6.0f);
+
+  static cv::Ptr<Template> createPtr_from(
+      const cv::Mat &src, TemplateParams params = TemplateParams());
 
   void create_from(const cv::Mat &src);
 
-  void selectFeatures_from(std::vector<Feature> &candidates, float distance);
+  void selectFeatures_from(const cv::Mat &_edges, const cv::Mat &_angles,
+                           int nms_kernel_size = 3);
+
+  void scatter();
 
   std::vector<Feature> relocate_by(shapeInfo_producer::Info info);
 
   bool iscreated() { return template_created; }
 
-  std::vector<Feature> &pg_ptr() { return features; };
+  std::vector<Feature> &pg_ptr() { return prograds; };
 
   void show_in(cv::Mat &background, cv::Point center,
-               shapeInfo_producer::Info info = shapeInfo_producer::Info());
+               shapeInfo_producer::Info info = shapeInfo_producer::Info(), int size = 32);
 
-private:
-  TemplateParams defaultParams;  // 默认参数列表
-  int nms_kernel_size;           // 非极大值抑制的窗口大小
-  float magnitude_threshold;     // 最小梯度阈值 取值范围 [0, 1.0)
-  size_t num_features;           // 特征方向个数
-  bool template_created;         // 记录模板创建状态
-  std::vector<Feature> features; // 特征方向序列
+ private:
+  TemplateParams defaultParams;   // 默认参数列表
+  int nms_kernel_size;            // 非极大值抑制的窗口大小
+  float scatter_distance;         // 离散化特征点之间的最小距离
+  float grad_norm;                // 最小梯度阈值 取值范围 [0, 1.0)
+  size_t num_features;            // 特征方向个数
+  bool template_created;          // 记录模板创建状态
+  std::vector<Feature> prograds;  // 特征方向序列
 };
 
 class Detector {
-public:
+ public:
   struct MatchPoint {
-    int x;
-    int y;
-    int template_id;
+    cv::Point p_xy;
     float similarity;
-
-    MatchPoint(int _x, int _y, int _template_id, float _similarity)
-        : x(_x), y(_y), template_id(_template_id), similarity(_similarity) {}
-
+    shapeInfo_producer::Info info;
+    MatchPoint(cv::Point p, float similar_score, shapeInfo_producer::Info _info)
+        : p_xy(p), similarity(similar_score), info(_info) {}
     bool operator<(const MatchPoint &rhs) const {
-      if (similarity == rhs.similarity)
-        return template_id > rhs.template_id;
       return similarity > rhs.similarity;
     }
   };
 
   class LinearMemories {
-  private:
-    std::vector<std::vector<float>> memories; // 线性存储器
+   private:
+    std::vector<std::vector<float>> memories;  // 线性存储器
 
-  public:
+   public:
     int rows;
     int cols;
 
@@ -259,20 +260,25 @@ public:
     /// @param j -> index in linear vector
     /// @return &memories[i][j]
     float &at(size_t i, size_t j) {
-      static float default_value = 0.0f; // 静态的默认值
-      if (i < 0 || i >= memories.size())
-        return default_value;
-      if (j < 0 || j >= memories[0].size())
-        return default_value;
+      static float default_value = 0.0f;  // 静态的默认值
+      if (i < 0 || i >= memories.size()) return default_value;
+      if (j < 0 || j >= memories[0].size()) return default_value;
       return memories[i][j];
     }
   };
+
+  int pyramid_level;
+  ImagePyramid src_pyramid;
+  std::vector<std::vector<LinearMemories>> memory_pyramid;
+  std::vector<cv::Ptr<Template>> template_pyramid;
+  std::vector<MatchPoint> match_points;
+  static std::vector<float> cos_table;
 
   Detector();
 
   static void quantize(const cv::Mat &edges, const cv::Mat &angles,
                        cv::Mat &dst, int kernel_size = 3,
-                       float magnitude_threshold = line2d_eps);
+                       float grad_norm = line2d_eps);
 
   static void spread(cv::Mat &ori_bit, cv::Mat &spread_ori,
                      int kernel_size = 3);
@@ -280,15 +286,14 @@ public:
   static void computeResponseMaps(cv::Mat &spread_ori,
                                   std::vector<cv::Mat> &response_maps);
 
-  static void
-  para_computeSimilarityMap(std::vector<LinearMemories> &memories,
-                            const std::vector<Template::Feature> &features,
-                            LinearMemories &similarity, int start, int end);
+  static void para_computeSimilarityMap(std::vector<LinearMemories> &memories,
+                              const std::vector<Template::Feature> &features,
+                              LinearMemories &similarity, int start, int end);
 
-  static void
-  computeSimilarityMap(std::vector<LinearMemories> &memories,
-                       const std::vector<Template::Feature> &features,
-                       LinearMemories &similarity);
+  static void computeSimilarityMap(
+      std::vector<LinearMemories> &memories,
+      const std::vector<Template::Feature> &features,
+      LinearMemories &similarity);
 
   static void localSimilarityMap(std::vector<LinearMemories> &memories,
                                  const std::vector<Template::Feature> &features,
@@ -303,39 +308,37 @@ public:
   static void produceRoi(cv::Mat &similarity_map,
                          std::vector<cv::Rect> &roi_list, int lower_score);
 
-  void addSourceImage(const cv::Mat &src, int pyramid_level = 2,
-                      cv::Mat mask = cv::Mat(),
-                      const cv::String &memories_id = "default");
+  void setSourceImage(const cv::Mat &src, int pyramid_level = 2,
+                      cv::Mat mask = cv::Mat());
 
-  void addTemplate(const cv::Mat &temp_src, int pyramid_level = 2,
-                   Template::TemplateParams params = Template::TemplateParams(),
-                   cv::Mat mask = cv::Mat(), shapeInfo_producer *sip = nullptr,
-                   const cv::String &templates_id = "default");
+  void setTempate(const cv::Mat &temp_src, int pyramid_level = 2,
+                  Template::TemplateParams params = Template::TemplateParams(),
+                  cv::Mat mask = cv::Mat());
 
-  void match(const cv::Mat &sourceImage, shapeInfo_producer *sip = nullptr,
-             int lower_score = 90,
+  static void nmsMatchPoints(std::vector<MatchPoint> &match_points, float threshold);
+
+  void selectMatchPoints(
+      cv::Mat &similarity_map, std::vector<cv::Rect> &roi_list, float lower_score,
+      shapeInfo_producer::Info info = shapeInfo_producer::Info());
+
+  void match(const cv::Mat &sourceImage, const cv::Mat &templateImage,
+             float lower_score = 90,
+             Template::TemplateParams params = Template::TemplateParams(),
+             cv::Mat mask_src = cv::Mat(), cv::Mat mask_temp = cv::Mat());
+
+  void match(const cv::Mat &sourceImage, shapeInfo_producer *sip,
+             float lower_score = 90,
              Template::TemplateParams params = Template::TemplateParams(),
              cv::Mat mask_src = cv::Mat());
 
-  void matchClass(const cv::String &match_id);
+  void detectBestMatch(std::vector<cv::Vec6f> &points);
 
-  void draw(cv::Mat background, const cv::String &match_id = "default", int template_id = 0);
+  void draw();
 
-private:
-  int pyramid_level;
-
-  typedef std::vector<std::vector<LinearMemories>> memory_pyramid;
-  typedef std::vector<cv::Ptr<Template>> template_pyramid;
-  typedef std::vector<MatchPoint> matches;
-  std::map<cv::String, memory_pyramid> memories_map;
-  std::map<cv::String, vector<template_pyramid>> templates_map;
-  std::map<cv::String, matches> matches_map;
-
-  static std::vector<float> cos_table;
-
+ private:
   void init_costable();
 };
 
-} // namespace line2d
+}  // namespace line2d
 
-#endif // OPENCV_LINE_2D_HPP
+#endif  // OPENCV_LINE_2D_HPP
