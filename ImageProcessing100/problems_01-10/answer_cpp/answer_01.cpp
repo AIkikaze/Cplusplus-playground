@@ -8,6 +8,7 @@
  * 读取图像, 将 RGB 通道的图片转换为 BRG 通道
  */
 
+#include <iostream>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <algorithm>

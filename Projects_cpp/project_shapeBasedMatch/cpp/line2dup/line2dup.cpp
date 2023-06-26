@@ -3,80 +3,6 @@ using namespace cv;
 using namespace std;
 using namespace line2Dup;
 
-// class Timer {
-//  public:
-//   Timer() : beg_(clock_::now()) {}
-//   void reset() { beg_ = clock_::now(); }
-//   double elapsed() const {
-//     return std::chrono::duration_cast<second_>(clock_::now() - beg_).count();
-//   }
-
-//   void out(std::string message = "") {
-//     double t = elapsed();
-//     std::cout << message << "\nelasped time:" << t << "s\n" << std::endl;
-//     reset();
-//   }
-
-//  private:
-//   typedef std::chrono::high_resolution_clock clock_;
-//   typedef std::chrono::duration<double, std::ratio<1>> second_;
-//   std::chrono::time_point<clock_> beg_;
-// };
-
-#include <chrono>
-
-class Timer {
-public:
-  Timer() : start_(std::chrono::high_resolution_clock::now()), time_(0) {}
-
-  void start() { start_ = std::chrono::high_resolution_clock::now(); }
-
-  void stop() {
-    auto end = std::chrono::high_resolution_clock::now();
-    time_ += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start_)
-                 .count();
-    start_ = {};
-  }
-
-  double time() {
-    stop();
-    double ret = static_cast<double>(time_) / 1e9; // 转换为秒
-    time_ = 0;
-    return ret;
-  }
-
-  void out(const std::string &message = "") {
-    double t = time();
-    printf("%s\nelapsed time: %fs\n", message.c_str(), t);
-    start();
-  }
-
-private:
-  std::chrono::time_point<std::chrono::high_resolution_clock> start_;
-  int64_t time_;
-};
-
-class TimeCounter {
-public:
-  TimeCounter(String _name) : name(_name), count(0) {}
-
-  void begin() { timer.start(); }
-  void countOnce() { count++, time += timer.time(); }
-  void out() {
-    printf(" ***** %s ***** \n", name.c_str());
-    printf(" count -> %7d \n", count);
-    printf(" tolal time -> %7fs \n", !count ? 0 : time);
-    printf(" average time -> %7fs \n", !count ? 0 : time / count);
-  }
-
-private:
-  Timer timer;
-  String name;
-
-  int count;
-  double time;
-};
-
 Mat background;
 
 /// debug
@@ -410,6 +336,7 @@ ColorGradientPyramid::ColorGradientPyramid(const Mat &_src, const Mat &_mask,
     : pyramid_level(0), src(_src), mask(_mask),
       magnitude_threshold(_magnitude_threshold),
       count_kernel_size(_count_kernel_size), num_features(_num_features) {
+  cout << "自定义构造函数" << endl;
   update();
 }
 
@@ -780,7 +707,18 @@ void Detector::setSource(cv::Mat &src, cv::Mat mask) {
   }
 }
 
-void Detector::setTemplate(cv::Mat &object, cv::Mat object_mask, Search search) {
+void Detector::setTemplate(cv::Mat &object, cv::Mat object_mask) {
+  float default_scale_range[3] = {1.0f, 1.0f, 0.0f};
+  float default_angle_range[3] = {0.0f, 0.0f, 0.0f};
+
+  setTemplate(object, object_mask, default_scale_range, default_angle_range);
+}
+
+void Detector::setTemplate(cv::Mat &object, cv::Mat object_mask, 
+                           const float (&scale_range)[3], 
+                           const float (&angle_range)[3]) {
+  Search search(scale_range, angle_range);
+
   modality = modality->process(object, object_mask);
 
   for (int l = 0; l < pyramid_level; l++) {
@@ -826,8 +764,7 @@ static void computeSimilarity(LinearMemory *response_map,
       int j = max(0, -offset);
       mipp::Reg<short> reg_similarity;
       mipp::Reg<short> reg_response_map;
-      for (;
-           max(j, j + offset) <= (similarity.linear_size() - mipp::N<short>());
+      for (;max(j, j + offset) <= ((int)similarity.linear_size() - mipp::N<short>());
            j += mipp::N<short>()) {
         reg_similarity.load(&similarity.at(i, j));
 
@@ -839,7 +776,7 @@ static void computeSimilarity(LinearMemory *response_map,
         reg_similarity.store(&similarity.at(i, j));
       }
 
-      for (; j < similarity.linear_size(); j++)
+      for (; j < (int)similarity.linear_size(); j++)
         similarity.at(i, j) +=
             response_map[point.label].at(mod_y * 4 + mod_x, j + offset);
     }
@@ -872,7 +809,7 @@ static Point addLocalSimilarity(LinearMemory *response_map,
       auto map_ptr = &response_map[point.label].at(mod_y * 4 + mod_x, offset);
 
       int offset_j = 0;
-      for (int j = 0; j < similarity.linear_size(); j++) {
+      for (int j = 0; j < (int)similarity.linear_size(); j++) {
         offset_j = j % 4 + (j / similarity.cols) * response_map->cols;
         // printf("(%d, %d) <- (%d, %d) : %hd\n", j % 8, j / 8, (offset_j +
         // offset) % response_map->cols, (offset_j + offset) /
@@ -893,35 +830,6 @@ struct MatchPredicate {
   MatchPredicate(float _threshold) : threshold(_threshold) {}
   bool operator()(const Match &m) { return m.similarity < threshold; }
 };
-
-// void Detector::match(cv::Mat &src, cv::Mat &object, int tol_level,
-//                      float score_threshold, const Search &search,
-//                      cv::Mat src_mask, cv::Mat object_mask) {
-//   Timer time;
-//   pyramid_level = tol_level;
-//   spread_kernels.resize(pyramid_level);
-//   auto it = spread_kernels.begin(), it_end = spread_kernels.end();
-//   for (int i = 0; it != it_end; it++, i++) {
-//     // (*it) = static_cast<uchar>((2 << i) - 1);
-//     (*it) = 3;
-//   }
-
-//   std::cout << "pyramid level: " << pyramid_level << endl;
-
-//   time.start();
-//   setSource(src, src_mask);
-//   time.out("__ 源图像初始化完成! __");
-
-//   time.start();
-//   setTemplate(object, object_mask, search);
-//   time.out("__ 模板加载完成! __");
-
-//   time.start();
-//   matchClass(score_threshold);
-//   time.out("__ 模板匹配计算完成! __");
-
-//   draw(src);
-// }
 
 static void nmsMatchPoints(vector<Match> &match_points, float threshold) {
   if (match_points.empty())
@@ -1135,37 +1043,25 @@ void Detector::read(cv::FileNode& fn) {
   fn["spread_kernels"] >> spread_kernels;
 
   // 读取 modality 对象
-  cv::FileNode modalityNode = fn["modality"];
-  modality->read(modalityNode);
+  cv::FileNode f_modality = fn["modality"];
+  modality->read(f_modality);
 
   // 读取 templates_pyramid
   cv::FileNode templatesNode = fn["templates_pyramid"];
+  CV_Assert(templatesNode.type() == FileNode::SEQ);
   templates_pyramid.resize(templatesNode.size());
   int i = 0;
-  for (cv::FileNode templateNode : templatesNode) {
-    TemplateSearch templateSearch;
-    templateSearch.read(templateNode);
-    templates_pyramid[i++] = templateSearch;
+  for (cv::FileNode f_template : templatesNode) {
+    templates_pyramid[i++].read(f_template);
   }
 
   // 读取 memories_pyramid
   cv::FileNode memoriesNode = fn["memories_pyramid"];
+  CV_Assert(memoriesNode.type() == FileNode::SEQ);
   memories_pyramid.resize(memoriesNode.size());
   i = 0;
-  for (cv::FileNode memoryNode : memoriesNode) {
-    LinearMemory linearMemory(block_size);
-    linearMemory.read(memoryNode);
-    memories_pyramid[i++] = linearMemory;
-  }
-
-  // 读取 matches
-  cv::FileNode matchesNode = fn["matches"];
-  matches.resize(matchesNode.size());
-  i = 0;
-  for (cv::FileNode matchNode : matchesNode) {
-    Match match;
-    match.read(matchNode);
-    matches[i++] = match;
+  for (cv::FileNode f_memory : memoriesNode) {
+    memories_pyramid[i++].read(f_memory);
   }
 }
 
@@ -1176,14 +1072,14 @@ void Detector::write(cv::FileStorage& fs) const {
   fs << "spread_kernels" << spread_kernels;
 
   // 写入 modality 对象
-  cv::FileStorage modalityFS(fs.fs, fs.fs->name + "_modality");
-  modality->write(modalityFS);
-  modalityFS.release();
+  fs << "modality" << "[";
+  modality->write(fs);
+  fs << "]";
 
   // 写入 templates_pyramid
   fs << "templates_pyramid" << "[";
   for (const TemplateSearch& templateSearch : templates_pyramid) {
-    cv::FileStorage templateFS(fs.fs, fs.fs->name + "_template");
+    cv::FileStorage templateFS(fs, fs->name + "_template");
     templateSearch.write(templateFS);
     templateFS.release();
   }
@@ -1192,18 +1088,9 @@ void Detector::write(cv::FileStorage& fs) const {
   // 写入 memories_pyramid
   fs << "memories_pyramid" << "[";
   for (const LinearMemory& linearMemory : memories_pyramid) {
-    cv::FileStorage memoryFS(fs.fs, fs.fs->name + "_memory");
+    cv::FileStorage memoryFS(fs, fs->name + "_memory");
     linearMemory.write(memoryFS);
     memoryFS.release();
-  }
-  fs << "]";
-
-  // 写入 matches
-  fs << "matches" << "[";
-  for (const Match& match : matches) {
-    cv::FileStorage matchFS(fs.fs, fs.fs->name + "_match");
-    match.write(matchFS);
-    matchFS.release();
   }
   fs << "]";
 }
