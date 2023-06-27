@@ -39,12 +39,14 @@ int main() {
 
   Timer time;
 
-  line2Dup::ColorGradientPyramid modality;
-  modality.magnitude_threshold = 50.0f;
-  modality.count_kernel_size = 3;
-  modality.num_features = 100;
+  typedef line2Dup::ColorGradientPyramid MODAL;
+
+  Ptr<MODAL> modality = makePtr<MODAL>();
+  modality->magnitude_threshold = 50.0f;
+  modality->count_kernel_size = 3;
+  modality->num_features = 100;
   
-  line2Dup::Detector detector(3, 4, {3, 3, 3}, &modality);
+  line2Dup::Detector detector(3, 4, {3, 3, 3}, modality);
   time.start();
   detector.setSource(sourceImage);
   time.out("__ 源图像初始化完成! __");

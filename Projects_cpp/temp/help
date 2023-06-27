@@ -1,0 +1,20 @@
+%YAML:1.0
+---
+images:
+   - "image1.jpg"
+   - "myfi.png"
+   - "baboon.jpg"
+R: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 1., 0., 0., 0., 1., 0., 0., 0., 1. ]
+T: !!opencv-matrix
+   rows: 3
+   cols: 1
+   dt: d
+   data: [ 0., 0., 0. ]
+mdata:
+   A: 97
+   X: 3.1415926535897931e+00
+   id: mydata1234

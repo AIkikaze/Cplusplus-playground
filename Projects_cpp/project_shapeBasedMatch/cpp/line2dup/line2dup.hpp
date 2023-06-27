@@ -94,9 +94,6 @@ struct Gradient : Feature {
     }
     return *this;
   }
-
-  void read(const cv::FileNode &fn);
-  void write(cv::FileStorage &fs) const;
 };
 
 /// @brief Gradient struct which need to be filtered by the length of
@@ -154,9 +151,6 @@ struct ShapeTemplate {
   /// template
   void show_in(cv::Mat &background, std::vector<LinearMemory> &score_maps,
                cv::Point new_center);
-
-  void read(const cv::FileNode &fn);
-  void write(cv::FileStorage &fs) const;
 };
 
 /// Range -> Search
@@ -167,6 +161,9 @@ struct Range {
   float upper_bound;
   float step;
   std::vector<float> values;
+
+  Range()
+      : lower_bound(0), upper_bound(0), step(line2d_eps) {}
 
   Range(float l, float u, float s)
       : lower_bound(l), upper_bound(u), step(fmax(s, line2d_eps)) {
@@ -189,9 +186,6 @@ struct Range {
       values.push_back(value);
     }
   }
-
-  void read(cv::FileNode &fn);
-  void write(cv::FileStorage &fs) const;
 };
 
 /// @brief Search in scale range and angle range
@@ -235,9 +229,6 @@ class TemplateSearch {
   /// would better be 0.0f
   void build(const Search &search, ShapeTemplate &base);
 
-  void read(cv::FileNode &fn);
-  void write(cv::FileStorage &fs) const;
-
  private:
   int rows;
   int cols;
@@ -246,6 +237,12 @@ class TemplateSearch {
 };
 
 /// ColorGradientPyramid
+
+void quantizeAngle(cv::Mat &magnitude, cv::Mat &angle, cv::Mat &quantized_angle,
+                          float threshold, int kernel_size);
+
+void sobelMagnitude(const cv::Mat &src, cv::Mat &magnitude, cv::Mat &sobel_dx,
+                           cv::Mat &sobel_dy);
 
 /// @brief this is a class possessing 2 basic function :
 /// 1. calculate the quantized mat of the phase mat of a source image
@@ -263,10 +260,11 @@ class ColorGradientPyramid {
 
   /// @brief call constructor to create a new instance of ColorGradientPyramid
   /// @return Ptr<ColorGradientPyramid>
-  cv::Ptr<ColorGradientPyramid> process(const cv::Mat src,
-                                        const cv::Mat &mask = cv::Mat()) const {
-    return cv::makePtr<ColorGradientPyramid>(src, mask, magnitude_threshold,
-                                             count_kernel_size, num_features);
+  void process(const cv::Mat &_src,
+               const cv::Mat &_mask = cv::Mat()) {
+    src = _src;
+    mask = _mask;
+    update();
   }
 
   /// @brief copy quantized mat to dst
@@ -288,17 +286,22 @@ class ColorGradientPyramid {
   /// @brief to get the source Image as background
   cv::Mat background() { return src.clone(); }
 
-  void read(cv::FileNode &fn);
-  void write(cv::FileStorage &fs) const;
-
-  ColorGradientPyramid(const cv::Mat &_src, const cv::Mat &_mask,
-                       float _magnitude_threshold = 50.0f,
-                       int _count_kernel_size = 3, size_t _num_features = 100);
-
  private:
+  // ColorGradientPyramid(const cv::Mat &_src, const cv::Mat &_mask,
+  //                      float _magnitude_threshold = 50.0f,
+  //                      int _count_kernel_size = 3, size_t _num_features = 100);
+
   /// @brief recalculate the quantized mat of the phase mat of the
   /// source image
-  inline void update();
+  inline void update() {
+    cv::Mat sobel_dx, sobel_dy;
+    sobelMagnitude(src, magnitude, sobel_dx, sobel_dy);
+
+    phase(sobel_dx, sobel_dy, angle, true);
+
+    quantizeAngle(magnitude, angle, quantized_angle, magnitude_threshold,
+                  count_kernel_size);
+  }
 
   int pyramid_level = 0;
 
@@ -385,9 +388,6 @@ class LinearMemory {
   /// (rows * block_size) x (cols * block_size)
   void unlinearize(cv::Mat &dst);
 
-  void read(cv::FileNode &fn);
-  void write(cv::FileStorage &fs) const;
-
  private:
   std::vector<std::vector<short>> memories;
 };
@@ -404,7 +404,7 @@ class Detector {
         modality(_modality) {
     CV_Assert(pyramid_level > 0);
     CV_Assert(block_size > 2);
-    CV_Assert((int)spread_kernels.size() > pyramid_level);
+    CV_Assert((int)spread_kernels.size() >= pyramid_level);
     CV_Assert(modality != nullptr);
   }
 
@@ -437,9 +437,6 @@ class Detector {
 
   void draw(cv::Mat background);
 
-  void read(cv::FileNode &fn);
-  void write(cv::FileStorage &fs) const;
-
  private:
   Detector() {}
 
@@ -457,3 +454,4 @@ class Detector {
 }  // namespace line2Dup
 
 #endif  // LINE2D_UP_HPP
+
