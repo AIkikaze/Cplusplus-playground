@@ -23,22 +23,22 @@ inline Vec3b labelcolor(int label) {
   static Vec3b colors[16];
 
   // Set 16 distinct color parameters
-  colors[0] = Vec3b(255, 0, 0);       // Blue
-  colors[1] = Vec3b(0, 255, 0);       // Green
-  colors[2] = Vec3b(0, 0, 255);       // Red
-  colors[3] = Vec3b(255, 255, 0);     // Cyan
-  colors[4] = Vec3b(255, 0, 255);     // Magenta
-  colors[5] = Vec3b(0, 255, 255);     // Yellow
-  colors[6] = Vec3b(128, 0, 0);       // Dark Blue
-  colors[7] = Vec3b(0, 128, 0);       // Dark Green
-  colors[8] = Vec3b(0, 0, 128);       // Dark Red
-  colors[9] = Vec3b(128, 128, 0);     // Olive
-  colors[10] = Vec3b(128, 0, 128);    // Dark Magenta
-  colors[11] = Vec3b(0, 128, 128);    // Dark Yellow
-  colors[12] = Vec3b(192, 192, 192);  // Silver
-  colors[13] = Vec3b(128, 128, 128);  // Gray
-  colors[14] = Vec3b(255, 165, 0);    // Orange
-  colors[15] = Vec3b(128, 0, 0);      // Brown
+  colors[0] = Vec3b(255, 0, 0);      // Blue
+  colors[1] = Vec3b(0, 255, 0);      // Green
+  colors[2] = Vec3b(0, 0, 255);      // Red
+  colors[3] = Vec3b(255, 255, 0);    // Cyan
+  colors[4] = Vec3b(255, 0, 255);    // Magenta
+  colors[5] = Vec3b(0, 255, 255);    // Yellow
+  colors[6] = Vec3b(128, 0, 0);      // Dark Blue
+  colors[7] = Vec3b(0, 128, 0);      // Dark Green
+  colors[8] = Vec3b(0, 0, 128);      // Dark Red
+  colors[9] = Vec3b(128, 128, 0);    // Olive
+  colors[10] = Vec3b(128, 0, 128);   // Dark Magenta
+  colors[11] = Vec3b(0, 128, 128);   // Dark Yellow
+  colors[12] = Vec3b(192, 192, 192); // Silver
+  colors[13] = Vec3b(128, 128, 128); // Gray
+  colors[14] = Vec3b(255, 165, 0);   // Orange
+  colors[15] = Vec3b(128, 0, 0);     // Brown
 
   return colors[label];
 }
@@ -50,7 +50,8 @@ void colormap(const Mat &quantized, Mat &dst) {
     Vec3b *dst_r = dst.ptr<Vec3b>(r);
     for (int c = 0; c < dst.cols; c++) {
       for (int k = 0; k < 16; k++)
-        if (quad_r[c] & (1 << k)) dst_r[c] = labelcolor(k);
+        if (quad_r[c] & (1 << k))
+          dst_r[c] = labelcolor(k);
     }
   }
 }
@@ -157,7 +158,8 @@ void ShapeTemplate::show_in(Mat &background, Point new_center) {
   // 平移旋转矩形到新的中心点位置
   RotatedRect translatedRect = box;
   Point2f &center = translatedRect.center;
-  if (new_center.x > 0 && new_center.y > 0) center = new_center;
+  if (new_center.x > 0 && new_center.y > 0)
+    center = new_center;
   // 增加边框
   translatedRect.size.width += 10;
   translatedRect.size.height += 10;
@@ -184,7 +186,8 @@ void line2Dup::ShapeTemplate::show_in(Mat &background,
   // 平移旋转矩形到新的中心点位置
   RotatedRect translatedRect = box;
   Point2f &center = translatedRect.center;
-  if (new_center.x > 0 && new_center.y > 0) center = new_center;
+  if (new_center.x > 0 && new_center.y > 0)
+    center = new_center;
   // 增加边框
   translatedRect.size.width += 10;
   translatedRect.size.height += 10;
@@ -197,15 +200,15 @@ void line2Dup::ShapeTemplate::show_in(Mat &background,
 
   // 定义自定义热力图的颜色映射
   std::vector<cv::Scalar> heatmapColors = {
-      Scalar(32, 32, 32),   // 灰色
-      Scalar(255, 0, 0),    // 蓝色
-      Scalar(255, 128, 0),  // 浅蓝色
-      Scalar(255, 255, 0),  // 青色
-      Scalar(0, 255, 0),    // 绿色
-      Scalar(0, 255, 255),  // 黄色
-      Scalar(0, 128, 255),  // 橙色
-      Scalar(0, 0, 255),    // 红色
-      Scalar(0, 0, 128)     // 深红色
+      Scalar(32, 32, 32),  // 灰色
+      Scalar(255, 0, 0),   // 蓝色
+      Scalar(255, 128, 0), // 浅蓝色
+      Scalar(255, 255, 0), // 青色
+      Scalar(0, 255, 0),   // 绿色
+      Scalar(0, 255, 255), // 黄色
+      Scalar(0, 128, 255), // 橙色
+      Scalar(0, 0, 255),   // 红色
+      Scalar(0, 0, 128)    // 深红色
   };
 
   for (const auto &f : features) {
@@ -359,7 +362,8 @@ void selectScatteredFeatures(const vector<Candidate> &candidates,
       keep = (c.x - fj.x) * (c.x - fj.x) + (c.y - fj.y) * (c.y - fj.y) >=
              distance_sq;
     }
-    if (keep) features.push_back(c);
+    if (keep)
+      features.push_back(c);
 
     if (++i == (int)candidates.size()) {
       i = 0;
@@ -390,7 +394,8 @@ bool ColorGradientPyramid::extractTemplate(ShapeTemplate &templ) const {
       }
     }
   }
-  if (candidates.size() < num_features) return false;
+  if (candidates.size() < num_features)
+    return false;
 
   stable_sort(candidates.begin(), candidates.end());
 
@@ -433,8 +438,8 @@ void ColorGradientPyramid::pyrDown() {
   update();
 }
 
-void line2Dup::quantizeAngle(Mat &magnitude, Mat &angle, Mat &quantized_angle,
-                             float threshold, int kernel_size) {
+static void quantizeAngle(Mat &magnitude, Mat &angle, Mat &quantized_angle,
+                          float threshold, int kernel_size) {
   Mat quanized_unfiltered;
   angle.convertTo(quanized_unfiltered, CV_8U, 32.0 / 360.0);
 
@@ -451,12 +456,14 @@ void line2Dup::quantizeAngle(Mat &magnitude, Mat &angle, Mat &quantized_angle,
   int total_kernel = kernel_size * kernel_size;
   int NEIGHBOR_THRESHOLD = total_kernel / 2 + 1;
 
-  for (int i = 0; i < kernel_size; i++) dx[i] = dy[i] = -(kernel_size / 2) + i;
+  for (int i = 0; i < kernel_size; i++)
+    dx[i] = dy[i] = -(kernel_size / 2) + i;
 
   for (int r = 0; r < angle.rows; r++) {
     float *mag_r = magnitude.ptr<float>(r);
     for (int c = 0; c < angle.cols; c++) {
-      if (mag_r[c] <= threshold) continue;
+      if (mag_r[c] <= threshold)
+        continue;
 
       int count[16] = {0};
       int index = -1;
@@ -464,7 +471,8 @@ void line2Dup::quantizeAngle(Mat &magnitude, Mat &angle, Mat &quantized_angle,
 
       for (int i = 0; i < total_kernel; i++) {
         int u = r + dy[i / kernel_size], v = c + dx[i % kernel_size];
-        if (u < 0 || v < 0 || u >= angle.rows || v >= angle.cols) continue;
+        if (u < 0 || v < 0 || u >= angle.rows || v >= angle.cols)
+          continue;
         count[quanized_unfiltered.at<uchar>(u, v)]++;
       }
 
@@ -481,8 +489,8 @@ void line2Dup::quantizeAngle(Mat &magnitude, Mat &angle, Mat &quantized_angle,
   }
 }
 
-void line2Dup::sobelMagnitude(const Mat &src, Mat &magnitude, Mat &sobel_dx,
-                              Mat &sobel_dy) {
+static void sobelMagnitude(const Mat &src, Mat &magnitude, Mat &sobel_dx,
+                           Mat &sobel_dy) {
   // Allocate temporary buffers
   Size size = src.size();
   Mat sobel_3dx;
@@ -533,20 +541,20 @@ void line2Dup::sobelMagnitude(const Mat &src, Mat &magnitude, Mat &sobel_dx,
   normalize(magnitude, magnitude, 0, 100.0f, NORM_MINMAX, CV_32F);
 }
 
-// void ColorGradientPyramid::update() {
-//   Mat sobel_dx, sobel_dy;
-//   sobelMagnitude(src, magnitude, sobel_dx, sobel_dy);
-//   // Mat magnitude_image;
-//   // normalize(magnitude, magnitude_image, 0, 255, NORM_MINMAX, CV_8U);
-//   // namedWindow("magnitude");
-//   // imshow("magnitude", magnitude_image);
-//   // waitKey();
+void ColorGradientPyramid::update() {
+  Mat sobel_dx, sobel_dy;
+  sobelMagnitude(src, magnitude, sobel_dx, sobel_dy);
+  // Mat magnitude_image;
+  // normalize(magnitude, magnitude_image, 0, 255, NORM_MINMAX, CV_8U);
+  // namedWindow("magnitude");
+  // imshow("magnitude", magnitude_image);
+  // waitKey();
 
-//   phase(sobel_dx, sobel_dy, angle, true);
+  phase(sobel_dx, sobel_dy, angle, true);
 
-//   quantizeAngle(magnitude, angle, quantized_angle, magnitude_threshold,
-//                 count_kernel_size);
-// }
+  quantizeAngle(magnitude, angle, quantized_angle, magnitude_threshold,
+                count_kernel_size);
+}
 
 void LinearMemory::linearize(const Mat &src) {
   int new_rows = (src.rows / block_size) * block_size;
@@ -600,6 +608,12 @@ void LinearMemory::unlinearize(Mat &dst) {
 /// Detector
 
 static void spread(Mat &src, Mat &dst, int kernel_size) {
+  CV_Assert(kernel_size >= 1);
+  if (kernel_size == 1) {
+    src.copyTo(dst);
+    return;
+  }
+
   dst = Mat::zeros(src.size(), QUANTIZE_TYPE);
   for (int i = 0; i < src.rows; i++) {
     for (int j = 0; j < src.cols; j++) {
@@ -630,7 +644,8 @@ static void computeResponseMaps(Mat &src, vector<Mat> &response_maps) {
 
   for (int i = 0; i < src.rows; i++) {
     for (int j = 0; j < src.cols; j++) {
-      if (!src.at<quantize_type>(i, j)) continue;
+      if (!src.at<quantize_type>(i, j))
+        continue;
 
       // std::cout << bitset<16>(src.at<quantize_type>(i, j)) << endl;
 
@@ -701,7 +716,8 @@ void Detector::setSource(Mat &src, Mat mask) {
     for (int i = 0; i < QUANTIZE_BASE; i++)
       memories_pyramid[l * QUANTIZE_BASE + i].linearize(response_maps[i]);
 
-    if (l != pyramid_level - 1) modal->pyrDown();
+    if (l != pyramid_level - 1)
+      modal->pyrDown();
   }
 }
 
@@ -734,7 +750,8 @@ void Detector::setTemplate(Mat &object, Mat object_mask,
     search.scale.setStep(search.scale.step * 2);
     search.angle.setStep(search.angle.step * 2);
 
-    if (l != pyramid_level - 1) modal->pyrDown();
+    if (l != pyramid_level - 1)
+      modal->pyrDown();
   }
 }
 
@@ -831,7 +848,8 @@ struct MatchPredicate {
 };
 
 static void nmsMatchPoints(vector<Match> &match_points, float threshold) {
-  if (match_points.empty()) return;
+  if (match_points.empty())
+    return;
 
   stable_sort(match_points.begin(), match_points.end(),
               [](const Match &a, const Match &b) {
@@ -864,7 +882,8 @@ static void nmsMatchPoints(vector<Match> &match_points, float threshold) {
       }
     }
 
-    if (keep) filtered_points.push_back(match_points[i]);
+    if (keep)
+      filtered_points.push_back(match_points[i]);
   }
 
   match_points = filtered_points;
@@ -1023,7 +1042,8 @@ void Detector::draw(Mat background) {
     putText(background, to_string(int(round(point.similarity))),
             Point(point.x - 10, point.y - 3), FONT_HERSHEY_PLAIN, 4, randColor);
   }
-  if (matches.empty()) cerr << "没有找到匹配点!" << endl;
+  if (matches.empty())
+    cerr << "没有找到匹配点!" << endl;
   namedWindow("matchImage", WINDOW_NORMAL);
   imshow("matchImage", background);
   waitKey();

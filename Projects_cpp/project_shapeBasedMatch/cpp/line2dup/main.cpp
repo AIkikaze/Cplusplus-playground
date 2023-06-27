@@ -56,7 +56,7 @@ int main() {
   time.out("__ 模板加载完成! __");
 
   time.start();
-  detector.match(80);
+  detector.match(50);
   time.out("__ 模板匹配计算完成! __");
 
   detector.draw(sourceImage);

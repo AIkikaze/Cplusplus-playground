@@ -238,12 +238,6 @@ class TemplateSearch {
 
 /// ColorGradientPyramid
 
-void quantizeAngle(cv::Mat &magnitude, cv::Mat &angle, cv::Mat &quantized_angle,
-                          float threshold, int kernel_size);
-
-void sobelMagnitude(const cv::Mat &src, cv::Mat &magnitude, cv::Mat &sobel_dx,
-                           cv::Mat &sobel_dy);
-
 /// @brief this is a class possessing 2 basic function :
 /// 1. calculate the quantized mat of the phase mat of a source image
 /// and export it using "quantize" function
@@ -293,15 +287,8 @@ class ColorGradientPyramid {
 
   /// @brief recalculate the quantized mat of the phase mat of the
   /// source image
-  inline void update() {
-    cv::Mat sobel_dx, sobel_dy;
-    sobelMagnitude(src, magnitude, sobel_dx, sobel_dy);
+  void update();
 
-    phase(sobel_dx, sobel_dy, angle, true);
-
-    quantizeAngle(magnitude, angle, quantized_angle, magnitude_threshold,
-                  count_kernel_size);
-  }
 
   int pyramid_level = 0;
 
