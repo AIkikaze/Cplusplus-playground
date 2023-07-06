@@ -1,4 +1,4 @@
-#include "cpp/line2d/line2d.hpp"
+#include "line2d/line2d.hpp"
 using namespace std;
 using namespace cv;
 
@@ -29,8 +29,8 @@ void MIPP_test() {
 }
 
 void write_test() {
-  Mat sourceImage = imread(filePath + "source.bmp", IMREAD_COLOR);
-  Mat templateImage = imread(filePath + "template.bmp", IMREAD_COLOR);
+  Mat sourceImage = imread(filePath + "source_1.bmp", IMREAD_COLOR);
+  Mat templateImage = imread(filePath + "template_1.bmp", IMREAD_COLOR);
 
   Timer time;
 
@@ -72,8 +72,8 @@ void write_test() {
 }
 
 void read_test() {
-  Mat sourceImage = imread(filePath + "source.bmp", IMREAD_COLOR);
-  Mat templateImage = imread(filePath + "template.bmp", IMREAD_COLOR);
+  Mat sourceImage = imread(filePath + "source_1.bmp", IMREAD_COLOR);
+  Mat templateImage = imread(filePath + "template_1.bmp", IMREAD_COLOR);
 
   Timer time;
 

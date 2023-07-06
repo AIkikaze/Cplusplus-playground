@@ -1,4 +1,4 @@
-#include "line2d.hpp"
+#include "line2d/line2d.hpp"
 using namespace cv;
 using namespace std;
 using namespace line2d;
@@ -441,16 +441,6 @@ struct ShapeTemplatePredicate {
   }
 };
 
-// vector<Ptr<ShapeTemplate>> TemplateSearch::searchInRegion(float scale,
-//                                                           float angle) {
-//   vector<Ptr<ShapeTemplate>> target_templates;
-//   copy_if(templates.begin(), templates.end(),
-//   back_inserter(target_templates),
-//           ShapeTemplatePredicate(scale, angle));
-
-//   return target_templates;
-// }
-
 vector<Ptr<ShapeTemplate>> TemplateSearch::searchInRegion(float scale, float angle) {
   vector<Ptr<ShapeTemplate>> target_templates;
   
@@ -503,7 +493,7 @@ void TemplateSearch::build(const Search &search, ShapeTemplate &base) {
 }
 
 void TemplateSearch::build(const Search &search,
-                           Ptr<ColorGradientPyramid> modal) {
+                           Ptr<Modality> modal) {
   region = search;
   const vector<float> &scales = search.scale.values;
   const vector<float> &angles = search.angle.values;
@@ -516,7 +506,7 @@ void TemplateSearch::build(const Search &search,
 #pragma omp parallel for
   for (int i = 0; i < (int)scales.size(); i++) {
     for (int j = 0; j < (int)angles.size(); j++) {
-      Ptr<ColorGradientPyramid> trans_modal(new ColorGradientPyramid(*modal));
+      Ptr<Modality> trans_modal = modal->clone();
       templates[i * cols + j] = makePtr<ShapeTemplate>(0, scales[i], angles[j]);
       trans_modal->affineTrans(angles[j], scales[i]);
       trans_modal->extractTemplate(*templates[i * cols + j]);
@@ -591,7 +581,7 @@ static void spread(Mat &src, Mat &dst, int kernel_size) {
   }
 }
 
-#include "similarity_lut.i"
+#include "line2d/similarity_lut.i"
 const int bit_mask[] = {15, 240, 3840, 61440};
 
 static void computeResponseMaps(Mat &src, vector<Mat> &response_maps) {
@@ -639,7 +629,7 @@ static void computeResponseMaps(Mat &src, vector<Mat> &response_maps) {
 }
 
 void Detector::setSource(Mat &src, Mat mask) {
-  Ptr<ColorGradientPyramid> modal(new ColorGradientPyramid(*modality));
+  Ptr<Modality> modal = modality->clone();
   modal->process(src, mask);
 
   for (int l = 0; l < pyramid_level; l++) {
@@ -693,7 +683,7 @@ void Detector::setTemplate(Mat &object, Mat object_mask,
                            const float (&angle_range)[3]) {
   Search search(scale_range, angle_range);
 
-  Ptr<ColorGradientPyramid> modal(new ColorGradientPyramid(*modality));
+  Ptr<Modality> modal = modality->clone();
   modal->process(object, object_mask);
 
   for (int l = 0; l < pyramid_level; l++) {
