@@ -1,14 +1,16 @@
 #ifndef LINE2DUP_PRECOMP_HPP
 #define LINE2DUP_PRECOMP_HPP
 
-#include "../../../MIPP/mipp.h"
+#include "MIPP/mipp.h"
 #include <omp.h>
 
 #include <set>
 #include <map>
 #include <list>
 #include <vector>
+#include <cstdio>
 #include <chrono>
+#include <cstdlib>
 #include <iostream>
 #include <algorithm>
 

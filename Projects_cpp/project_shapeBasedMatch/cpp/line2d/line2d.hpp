@@ -1,7 +1,7 @@
-#ifndef LINE2D_UP_HPP
-#define LINE2D_UP_HPP
+#ifndef LINE2D_HPP
+#define LINE2D_HPP
 
-#include "precomp.hpp"
+#include "../precomp.hpp"
 
 class Timer {
  public:
@@ -55,7 +55,7 @@ class TimeCounter {
   double time;
 };
 
-namespace line2Dup {
+namespace line2d {
 
 /// Feature -> Gradient -> Candidate
 
@@ -71,20 +71,25 @@ struct Feature {
   int label;
 
   Feature() : x(-1), y(-1), label(0) {}
+
   Feature(int _x, int _y, int _label) : x(_x), y(_y), label(_label) {}
 };
 
 /// @brief from the angle of the orientation of gradient vector to the label
 /// we used in Feature struct.
+
 #define angle2label(x) (static_cast<int>(x * 32.0f / 360.0f + 0.5f) & 15)
 
 /// @brief adding the extra variable named by "angle". This is for rescaling
 /// the featrues when template is resized or rotated.
 struct Gradient : Feature {
   float angle;
+
   Gradient() : Feature(), angle(0) {}
+
   Gradient(int _x, int _y, float _angle)
       : Feature(_x, _y, angle2label(_angle)), angle(_angle) {}
+
   Gradient &operator=(const Gradient &rhs) {
     if (this != &rhs) {
       x = rhs.x;
@@ -94,12 +99,16 @@ struct Gradient : Feature {
     }
     return *this;
   }
+
+  void read(const cv::FileNode &fn);
+  void write(cv::FileStorage &fs) const;
 };
 
 /// @brief Gradient struct which need to be filtered by the length of
 /// the gradient -> float score
 struct Candidate : Gradient {
   float score;
+
   Candidate(int _x, int _y, float _angle, float _score)
       : Gradient(_x, _y, _angle), score(_score) {}
 
@@ -121,6 +130,9 @@ struct ShapeTemplate {
   float scale;                     // the rescaling factor = 1.0f by default
   float angle;                     // the rotation factor  = 0.0f by default
 
+  ShapeTemplate() 
+      : pyramid_level(0), scale(1.0f), angle(0.0f) {}
+
   ShapeTemplate(int _pyramid_level, float _scale, float _angle)
       : pyramid_level(_pyramid_level),
         scale(_scale),
@@ -130,7 +142,7 @@ struct ShapeTemplate {
   /// rescaled by flaot new_scale, then manage its lifecycle using cv::Ptr
   /// @param new_scale[in] rewrite the scale of the ShapeTemplate
   /// @param new_angle[in] rewrite the angle of the ShapeTemplate
-  cv::Ptr<ShapeTemplate> relocate(float new_scale, float new_angle);
+  cv::Ptr<ShapeTemplate> relocate(float new_scale, float new_angle) const;
 
   /// @brief show all features and draw the box centered by cv::Point
   /// new_center in a given image as background
@@ -151,6 +163,9 @@ struct ShapeTemplate {
   /// template
   void show_in(cv::Mat &background, std::vector<LinearMemory> &score_maps,
                cv::Point new_center);
+
+  void read(const cv::FileNode &fn);
+  void write(cv::FileStorage &fs) const;
 };
 
 /// Range -> Search
@@ -162,6 +177,7 @@ struct Range {
   float step;
   std::vector<float> values;
 
+  
   Range()
       : lower_bound(0), upper_bound(0), step(line2d_eps) {}
 
@@ -171,7 +187,7 @@ struct Range {
   }
 
   Range(const float (&lus)[3])
-      : lower_bound(lus[0]), upper_bound(lus[1]), step(lus[2]) {
+      : Range(lus[0], lus[1], lus[2]) {
     update();
   }
 
@@ -182,10 +198,15 @@ struct Range {
 
   void update() {
     values.clear();
+    CV_Assert(lower_bound < upper_bound + line2d_eps);
     for (float value = lower_bound; value < upper_bound; value += step) {
       values.push_back(value);
     }
+    if (values.empty()) values.push_back(lower_bound);
   }
+
+  void read(const cv::FileNode &fn);
+  void write(cv::FileStorage &fs) const;
 };
 
 /// @brief Search in scale range and angle range
@@ -220,14 +241,29 @@ class TemplateSearch {
   /// sublist of templates
   std::vector<cv::Ptr<ShapeTemplate>> searchInRegion(float scale, float angle);
 
-  /// @brief use Search struct and ShapeTemplate struct to create this
-  /// class, in another word, to initialize the list of templates rotated
-  /// and rescaled by coordinates in the Search area
-  /// @param search[in] you need to provide the Search area
-  /// @param base[in] you need to provide an original template as the
-  /// base. "Original" means its scale would better be 1.0f, and its angle
-  /// would better be 0.0f
+  /// @brief Use Search struct and ShapeTemplate struct to create this
+  /// class, in another word, we use a ShapeTemplate as the basic one to 
+  /// initialize the list of templates by rescaling and rotating the features
+  /// of the basic template. To do so, we can load templates faster, but 
+  /// get less accurate features.
+  /// @param search[in] you need to provide the Search area (the struct 
+  /// containing the range of scale and angle)
+  /// @param base[in] you need to provide a ShapeTemplate as the
+  /// basic template. 
   void build(const Search &search, ShapeTemplate &base);
+
+  /// @brief Use Search struct and ColorGraidentPyramid (class) Modal to 
+  /// create this class. In this method, we recalculate the magnitude and 
+  /// angle for every resaled and rotated template image in order to get
+  /// features more accurately.
+  /// @param search[in] you need to provide the Search area (the struct
+  /// containting the range of scale and angle)
+  /// @param modal[in] you need to provide the pointer of a ColorGradientPyramid
+  /// which should by well-configed containing the params and source Image
+  void build(const Search &search, cv::Ptr<ColorGradientPyramid> modal);
+
+  void read(const cv::FileNode &fn);
+  void write(cv::FileStorage &fs) const;
 
  private:
   int rows;
@@ -247,7 +283,7 @@ class ColorGradientPyramid {
  public:
   float magnitude_threshold;
   int count_kernel_size;
-  size_t num_features;
+  int num_features;
 
   ColorGradientPyramid()
       : magnitude_threshold(50.0f), count_kernel_size(3), num_features(100) {}
@@ -256,13 +292,15 @@ class ColorGradientPyramid {
   /// @return Ptr<ColorGradientPyramid>
   void process(const cv::Mat &_src,
                const cv::Mat &_mask = cv::Mat()) {
+    CV_Assert(_mask.empty() || (_src.size() == _mask.size()));
     src = _src;
     mask = _mask;
     update();
   }
 
-  /// @brief copy quantized mat to dst
-  /// @param dst[out] empty mat is OK
+  /// @brief After the calculation, you need to call this function to 
+  /// get the result of Quantized Angle Matrix
+  /// @param dst[out] the result Matrix(empty mat is OK)
   void quantize(cv::Mat &dst) const {
     dst = cv::Mat::zeros(quantized_angle.size(), quantized_angle.type());
     quantized_angle.copyTo(dst, mask);
@@ -277,14 +315,23 @@ class ColorGradientPyramid {
   /// @brief resize the source image and mask
   void pyrDown();
 
-  /// @brief to get the source Image as background
-  cv::Mat background() { return src.clone(); }
+  /// @brief Rescale and Rotate the source Image (and mask) in this 
+  /// ColorGradientPyramid. After this, it will call "update()" function
+  /// to recalculate the magnitude and angle Matrix for the new source Image
+  /// @param angle[in] the factor to Rotate source Image
+  /// @param scale[in] the factor to Rescale source Image
+  void affineTrans(float angle, float scale);
+
+  /// @brief Provide an interface to get the source Image. I add this to check 
+  /// the process of "build()" function in TemplateSearch class.
+  /// @return the source Image as the background to display the result of template
+  /// @todo Can I modify this as a extension function in its subclass?
+  cv::Mat& background() { return src; };
+
+  void read(const cv::FileNode &fn);
+  void write(cv::FileStorage &fs) const;
 
  private:
-  // ColorGradientPyramid(const cv::Mat &_src, const cv::Mat &_mask,
-  //                      float _magnitude_threshold = 50.0f,
-  //                      int _count_kernel_size = 3, size_t _num_features = 100);
-
   /// @brief recalculate the quantized mat of the phase mat of the
   /// source image
   void update();
@@ -300,6 +347,8 @@ class ColorGradientPyramid {
   cv::Mat quantized_angle;
 };
 
+
+
 /// Match and Detector
 
 /// @brief Match Point struct
@@ -313,15 +362,17 @@ struct Match {
       : x(_x), y(_y), similarity(_similarity), templ(_template) {}
 
   bool operator<(const Match &rhs) const { return similarity < rhs.similarity; }
-
-  bool operator==(const Match &rhs) const {
-    return x == rhs.x && y == rhs.y && similarity == rhs.similarity &&
-           templ == rhs.templ;
-  }
 };
 
-/// @brief The data structure obtained by repartitioning the matrix into 4x4
-/// blocks
+/// @brief The data structure obtained by dividing a matrix 
+/// into blocks with a size of 4x4 pixels per cell ( you 
+/// can define block_size = 2 / 4 / 6 / 8..). I didn't test
+/// this function, so different block_size may be incompatible 
+/// with function which need to calculate using SIMD, for 
+/// we need suitable size to initalize "Reg<T>". To choose
+/// block size wisely, you need to check out the number of 
+/// threads supported by your computer's CPU
+/// @todo Test with different block_size
 class LinearMemory {
  public:
   int block_size;
@@ -345,7 +396,7 @@ class LinearMemory {
       memories[i] = std::vector<short>(size, value);
   }
 
-  /// @brief to access memories[i][j] -> linearized Mat S_{orientaion}(x)
+  /// @brief to access memories[i][j]
   /// @param i -> order in TxT block
   /// @param j -> index in linear vector
   /// @return &memories[i][j]
@@ -356,9 +407,9 @@ class LinearMemory {
     return memories[i][j];
   }
 
-  /// @brief to access memories(y, x) using Mat coordinate (y, x)
-  /// @param y[in] the y coordinate in Rows x Cols Mat
-  /// @param x[in] the x coordinate in Rows x Cols Mat
+  /// @brief To access memories(y, x) using Mat coordinate (y, x)
+  /// @param y[in] The y coordinate in Rows x Cols Mat
+  /// @param x[in] The x coordinate in Rows x Cols Mat
   /// @return &memories(y, x)
   inline short &linear_at(const int &y, const int &x) {
     int i = (y % block_size) * block_size + (x % block_size);
@@ -366,21 +417,46 @@ class LinearMemory {
     return at(i, j);
   }
 
-  /// @brief to create LinearMemory from a Mat
-  /// @param src[in] the source Mat
+  /// @brief To create LinearMemory from a Mat
+  /// @param src[in] The source Mat
   void linearize(const cv::Mat &src);
 
-  /// @brief copy LinearMemory to a Mat
-  /// @param dst[out] the copied Mat would be CV_16U and resized by
+  /// @brief Copy LinearMemory to a Mat
+  /// @param dst[out] The copied Mat would be CV_16U and resized by
   /// (rows * block_size) x (cols * block_size)
   void unlinearize(cv::Mat &dst);
+
+
+  void read(const cv::FileNode &fn);
+  void write(cv::FileStorage &fs) const;
 
  private:
   std::vector<std::vector<short>> memories;
 };
 
+/// @brief The main interface for implementing template matching 
+/// functionality
 class Detector {
  public:
+  /// @brief Initialize the detector with a XML/YAML/JSON file
+  /// containing the necessary params and the data of Template
+  /// and Target Image. You can check the implement of "read()"
+  /// function in Detector class to understand how it work.
+  /// @param filename[in] the path of a XML/YAML/JSON file
+  Detector(const std::string &filename) { read(filename); }
+
+  /// @brief Initalize the detector with necessary params
+  /// @param _pyramid_level 1/2/3/... the number of pyramid level. High
+  /// level will highly speed up the Matching process, but also might lose
+  /// the target
+  /// @param _block_size 2/4/6/... the block_size of LinearMemory
+  /// @param _spread_kernels 1/3/5/7 the size of Spread Kernel in each 
+  /// pyramid level. Large size will increase the tolerance of template 
+  /// matching to addpt the small deviations in scale and rotation angle. 
+  /// I recommand you use {1, 3, 3, ...} or {3, 3, 3, ...}
+  /// @param _modality the pointer of ColorGradientPyramid(CGP), you can 
+  /// preset the params of CGP to adjust the configuration: the number
+  /// of features, the size of Count Kernel and the threshold of magnitude
   Detector(int _pyramid_level, int _block_size,
            std::vector<int> _spread_kernels,
            cv::Ptr<ColorGradientPyramid> _modality)
@@ -395,6 +471,20 @@ class Detector {
     CV_Assert(modality != nullptr);
   }
 
+  /// @brief Initalize the detector with necessary params
+  /// @param _name Add a name in order to distinguish different detector. 
+  /// though I have not implement relevant function need this "name" @todo
+  /// @param _pyramid_level 1/2/3/... the number of pyramid level. High
+  /// level will highly speed up the Matching process, but also might lose
+  /// the target
+  /// @param _block_size 2/4/6/... the block_size of LinearMemory
+  /// @param _spread_kernels 1/3/5/7 the size of Spread Kernel in each 
+  /// pyramid level. Large size will increase the tolerance of template 
+  /// matching to addpt the small deviations in scale and rotation angle. 
+  /// I recommand you use {1, 3, 3, ...} or {3, 3, 3, ...}
+  /// @param _modality the pointer of ColorGradientPyramid(CGP), you can 
+  /// preset the params of CGP to adjust the configuration: the number
+  /// of features, the size of Count Kernel and the threshold of magnitude
   Detector(cv::String _name, int _pyramid_level, int _block_size,
            std::vector<int> _spread_kernels,
            cv::Ptr<ColorGradientPyramid> _modality)
@@ -409,20 +499,46 @@ class Detector {
     CV_Assert(modality != nullptr);
   }
 
+  /// @brief Set Source Image and Calculate its Response Map. Notice that
+  /// the configuration is already set in the class member modality
+  /// @param src[in] the Mat of Source Image(multi-channel is OK). 
+  /// @param mask[in] the Mask of Source Image(should be empty or the 
+  /// the same size of src)
   void setSource(cv::Mat &src, cv::Mat mask = cv::Mat());
 
+  /// @brief Set Template Image and select Features from it. Notice that 
+  /// the configuration is already set in the class member modality
+  /// @param object[in] the Mat of Template Image(multi-channel is OK)
+  /// @param object_mask[in] the Mask of Template Image(should be empty
+  /// or the same size of object)
   void setTemplate(cv::Mat &object, cv::Mat object_mask = cv::Mat());
 
+  /// @brief Set Template Image and specify the search range for scaling 
+  /// factor and rotation angle
+  /// @param object[in] the Mat of Template Image(multi-channel is OK)
+  /// @param object_mask[in] the Mask of Template Image(cv::Mat() is OK)
+  /// @param scale_range[in] the range for scaling factor
+  /// @param angle_range[in] the range for rotation factor
   void setTemplate(cv::Mat &object, cv::Mat object_mask,
                    const float (&scale_range)[3],
                    const float (&angle_range)[3]);
 
+  /// @brief Template Matching which threshold
+  /// @param score_threshold recommand [50，95)
   void match(float score_threshold);
 
+  /// @brief Output the matching points and template bounding boxes
+  /// @param points[out] a list of Matching points
+  /// @param boxs[out] a list of bounding boxes
   void detectBestMatch(std::vector<cv::Vec6f> &points,
                        std::vector<cv::RotatedRect> &boxs);
 
+  /// @brief Draw matching result in a background(usually source Image)
+  /// @param background[in] you need to provide a Mat as the background
   void draw(cv::Mat background);
+
+  void read(const std::string &filename);
+  void write(const std::string &filename) const;
 
  private:
   Detector() {}
