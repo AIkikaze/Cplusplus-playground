@@ -1,11 +1,11 @@
 /*
- * @Author: AIkikaze wenwenziy@163.com
+ * @Author: Alkikaze
  * @Date: 2023-05-04 20:33:54
- * @LastEditors: AIkikaze wenwenziy@163.com
- * @LastEditTime: 2023-05-15 15:15:43
- * @FilePath: /C++-playground/ImageProcessing100/problems_01-10/answer_cpp/answer_09.cpp
+ * @LastEditors: Alkikaze wemwemziy@163.com
+ * @LastEditTime: 2023-07-07 09:11:59
+ * @FilePath: \Cplusplus-playground\ImageProcessing100\problems_01-10\answer_cpp\answer_09.cpp
  * @Description: 
- * 
+ * 高斯滤波
  */
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -16,44 +16,44 @@
 using namespace std;
 using namespace cv;
 
-Mat gaussianFilter(Mat &I, Size S, double SIGMA) {
-  int n_row = I.rows;
-  int n_col = I.cols;
-  int n_channel = I.channels();
-  int n_wid = S.width;
-  int n_hei = S.height;
+Mat gaussianFilter(Mat &I, Size size, double sigma) {
+  static int sizeTol = size.height * size.width;
   double kernel_sum = 0.0;
-  unique_ptr<double[]> kernel(new double [n_wid * n_hei]);
-  unique_ptr<int[]> dx(new int [n_wid * n_hei]);
-  unique_ptr<int[]> dy(new int [n_wid * n_hei]);
-  Mat T = Mat::zeros(n_row, n_col, CV_8UC3);
+  unique_ptr<double[]> kernel(new double [sizeTol]);
+  unique_ptr<int[]> dx(new int [sizeTol]);
+  unique_ptr<int[]> dy(new int [sizeTol]);
+  Mat T = Mat::zeros(I.size(), CV_8UC3);
 
   // 初始化高斯滤波器核与位移增量
-  for(int i = 0; i < n_hei; i++)
-    for(int j = 0; j < n_wid; j++) {
-      int _idx = i * n_wid + j;
-      dy[_idx] = -(n_wid>>1) + j;
-      dx[_idx] = -(n_hei>>1) + i;
-      double xy2 = (double)dx[_idx] * dx[_idx] + (double)dy[_idx] * dy[_idx];
-      kernel[_idx] = exp( - xy2 / (2 * SIGMA * SIGMA) ) / ( 2 * CV_PI * SIGMA * SIGMA );
-      kernel_sum += kernel[_idx];
+  for(int i = 0; i < size.width; i++) {
+    for(int j = 0; j < size.height; j++) {
+      int idx = i * size.width + j;
+      dy[idx] = -(size.height>>1) + i;
+      dx[idx] = -(size.width>>1) + j;
+      double xy2 = (double)dx[idx] * dx[idx] + (double)dy[idx] * dy[idx];
+      kernel[idx] = exp( - xy2 / (2 * sigma * sigma) ) / ( 2 * CV_PI * sigma * sigma );
+      kernel_sum += kernel[idx];
     }
+  }
+  
   // 归一化处理
-  for(int i = 0; i < n_wid * n_hei; i++)
+  for(int i = 0; i < sizeTol; i++)
     kernel[i] /= kernel_sum;
 
   // padding 滤波计算
-  for(int i = 0; i < n_row; i++)
-    for(int j = 0; j < n_col; j++)
-      for(int c = 0; c < n_channel; c++) {
-        double _p = 0.0;
-        for(int _i = 0; _i < n_wid * n_hei; _i++) {
-          if(i + dx[_i] < 0 || i + dx[_i] >= n_row || j + dy[_i] < 0 || j + dy[_i] >= n_col)
+  for(int i = 0; i < I.rows; i++) {
+    for(int j = 0; j < I.cols; j++) {
+      for(int c = 0; c < I.channels(); c++) {
+        double pixel_result = 0.0;
+        for(int idx = 0; idx < sizeTol; idx++) {
+          if(i + dy[idx] < 0 || i + dy[idx] >= I.rows || j + dx[idx] < 0 || j + dx[idx] >= I.cols)
             continue;
-          _p += kernel[_i] * I.at<Vec3b>(i + dx[_i], j + dy[_i])[c];
+          pixel_result += kernel[idx] * I.at<Vec3b>(i + dy[idx], j + dx[idx])[c];
         }
-        T.at<Vec3b>(i, j)[c] = (uchar)_p;
+        T.at<Vec3b>(i, j)[c] = (uchar)pixel_result;
       }
+    }
+  }
 
   return T;
 }
@@ -63,6 +63,7 @@ int main() {
   Mat A = gaussianFilter(img, Size(3, 3), 1.3);
   imshow("before", img);
   imshow("gaussianFilter", A);
+  imwrite("../imagelib/answer_09.jpg", A);
   waitKey();
   return 0;
 }

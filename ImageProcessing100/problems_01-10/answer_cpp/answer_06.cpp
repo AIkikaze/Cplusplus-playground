@@ -1,8 +1,12 @@
 /*
-auther: wenzy
-modified date: 20230501
-target: Discretization of Color
-*/
+ * @Author: Alkikaze
+ * @Date: 2023-05-01 17:46:28
+ * @LastEditors: Alkikaze wemwemziy@163.com
+ * @LastEditTime: 2023-07-06 17:23:23
+ * @FilePath: \Cplusplus-playground\ImageProcessing100\problems_01-10\answer_cpp\answer_06.cpp
+ * @Description: 
+ * 对三通道 8 bit 图像进行色彩量化，得到三通道 2 bit 图像。
+ */
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
@@ -23,22 +27,18 @@ void colorDisPixel(Vec3b &p) {
 
 Mat colorDiscretize(Mat &I) {
   CV_Assert(I.type() == CV_8UC3);
-
-  int n_row = I.rows;
-  int n_col = I.cols;
   Mat T = I.clone();
-
-  for(int i = 0; i < n_row; i++) 
-    for(int j = 0; j < n_col; j++)
+  for(int i = 0; i < I.rows; i++) 
+    for(int j = 0; j < I.cols; j++)
       colorDisPixel(T.at<Vec3b>(i, j));
-    
   return T;
 }
 
 int main() {
-  Mat img = imread("../imagelib/test_0.jpg", IMREAD_COLOR);
+  Mat img = imread("../imagelib/imori.jpg", IMREAD_COLOR);
   Mat A = colorDiscretize(img);
-  imshow("colorDiscretize", A);
+  imshow("answer_06", A);
+  imwrite("../imagelib/answer_06.jpg", A);
   waitKey();
   return 0;
 }

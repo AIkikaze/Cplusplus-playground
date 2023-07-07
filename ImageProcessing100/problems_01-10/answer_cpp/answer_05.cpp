@@ -1,8 +1,12 @@
 /*
-auther: wenzy
-modified date: 20230501
-target: Implement HSV conversion and flip Hue H.
-*/
+ * @Author: Alkikaze
+ * @Date: 2023-07-04 17:46:28
+ * @LastEditors: Alkikaze wemwemziy@163.com
+ * @LastEditTime: 2023-07-06 16:57:45
+ * @FilePath: \Cplusplus-playground\ImageProcessing100\problems_01-10\answer_cpp\answer_05.cpp
+ * @Description: 
+ * 对 HSV 图片进行色相反转
+ */
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
@@ -71,22 +75,18 @@ void hueConverePixel(Vec3b &p) {
 
 Mat hueFilp(Mat &I) {
   CV_Assert(I.type() == CV_8UC3);
-
-  int n_row = I.rows;
-  int n_col = I.cols;
   Mat T = I.clone();
-
-  for(int i = 0; i < n_row; i++)
-    for(int j = 0; j < n_col; j++)
+  for(int i = 0; i < I.rows; i++)
+    for(int j = 0; j < I.cols; j++)
       hueConverePixel(T.at<Vec3b>(i, j));
-
   return T;
 }
 
 int main() {
-  Mat img = imread("../imagelib/test_0.jpg", IMREAD_COLOR);
+  Mat img = imread("../imagelib/imori.jpg", IMREAD_COLOR);
   Mat A = hueFilp(img);
-  imshow("phaseSwap", A);
+  imshow("answer_05", A);
+  imwrite("../imagelib/answer_05.jpg", A);
   waitKey();
   return 0;
 }

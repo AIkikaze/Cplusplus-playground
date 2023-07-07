@@ -1,8 +1,12 @@
 /*
-author: wenzy
-modified date: 20230430
-target: Binarize the image using Ostu's methond
-*/
+ * @Author: Alkikaze
+ * @Date: 2023-04-30 17:46:28
+ * @LastEditors: Alkikaze wemwemziy@163.com
+ * @LastEditTime: 2023-07-06 16:49:20
+ * @FilePath: \Cplusplus-playground\ImageProcessing100\problems_01-10\answer_cpp\answer_04.cpp
+ * @Description: 
+ * 实现大津二值化算法
+ */
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
@@ -10,6 +14,7 @@ target: Binarize the image using Ostu's methond
 using namespace std;
 using namespace cv;
 
+/// @brief 用来构造灰度直方图
 struct grayHist {
   int BASE;
   int* val;
@@ -34,17 +39,13 @@ uchar getGrayValue(Vec3b &pixel) {
   return (uchar)( 0.2126 * pixel[2] + 0.7152 * pixel[1] + 0.0722 * pixel[0] );
 }
 
+/// @brief 将矩阵转化为灰度直方图
 grayHist makeHist(Mat &I) {
   CV_Assert(I.type() == CV_8UC3);
-
-  int n_rows = I.rows;
-  int n_cols = I.cols;
   grayHist hist;
-
-  for(int i = 0; i < n_rows; i++)
-    for(int j = 0; j < n_cols; j++)
+  for(int i = 0; i < I.rows; i++)
+    for(int j = 0; j < I.cols; j++)
       hist.val[getGrayValue(I.at<Vec3b>(i, j))]++;
-
   return hist;
 }
 
@@ -78,39 +79,33 @@ uchar OstuMethod(const grayHist &H) {
     s_inter = w_0 * (1 - w_0) * (mean_0 - mean_1) * (mean_0 - mean_1);
     if(s_inter > s_inter_max) {
       s_inter_max = s_inter;
-      bin_threshold_l = t;
+      bin_threshold_r = bin_threshold_l = t;
     }
     else if(s_inter == s_inter_max) 
       bin_threshold_r = t;
   }
 
-  return bin_threshold_l;
+  return (bin_threshold_l + bin_threshold_r) / 2;
 }
 
-Mat Binarize(Mat &I, uchar bin_t) {
+Mat Binarize(Mat &I, uchar threshold = 128) {
   CV_Assert(I.type() == CV_8UC3);
-
-  int n_rows = I.rows;
-  int n_cols = I.cols;
-  Mat T = Mat::zeros(n_rows, n_cols, CV_8U);
-
-  for(int i = 0; i < n_rows; i++)
-    for(int j = 0; j < n_cols; j++) {
-      if(getGrayValue(I.at<Vec3b>(i, j)) < bin_t)
-        T.at<uchar>(i, j) = 0;
-      else
-        T.at<uchar>(i, j) = 255;
+  Mat T = Mat::zeros(I.size(), CV_8U);
+  for(int r = 0; r < I.rows; r++) {
+    for(int c = 0; c < I.cols; c++) {
+      int flag = getGrayValue(I.at<Vec3b>(r, c)) > threshold;
+      T.at<uchar>(r, c) = 255 * flag;
     }
-  
+  }
   return T;
 }
 
 int main() {
-  Mat img = imread("../imagelib/test.jpeg", IMREAD_COLOR);
+  Mat img = imread("../imagelib/imori.jpg", IMREAD_COLOR);
   grayHist Hist = makeHist(img);
-  uchar binthresHold = OstuMethod(Hist);
-  Mat A = Binarize(img, binthresHold);
-  imshow("Binarize img with OstuMethod", A);
+  Mat A = Binarize(img, OstuMethod(Hist));
+  imshow("answer_04", A);
+  imwrite("../imagelib/answer_04.jpg", A);
   waitKey();
   return 0;
 }

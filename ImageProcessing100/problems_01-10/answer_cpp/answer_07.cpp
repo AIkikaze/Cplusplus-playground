@@ -1,8 +1,12 @@
 /*
-author: wenzy
-modified date: 20230501
-target: divide the grid into 8x8 and average pool
-*/
+ * @Author: Alkikaze
+ * @Date: 2023-05-01 17:46:28
+ * @LastEditors: Alkikaze wemwemziy@163.com
+ * @LastEditTime: 2023-07-07 08:07:05
+ * @FilePath: \Cplusplus-playground\ImageProcessing100\problems_01-10\answer_cpp\answer_07.cpp
+ * @Description: 
+ * 以 8x8 大小的核进行平均池化
+ */
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
@@ -11,46 +15,37 @@ using namespace cv;
 using namespace std;
 
 inline
-void averagePoolPixel(Mat &T, Mat &I, int ROW, int COL, int STEP) {
+void averagePoolPixel(Mat &T, Mat &I, int row_begin, int col_begin, int kernel_size) {
   int sum_tol[] = {0, 0, 0};
-  for(int i = ROW; i < ROW + 8; i++)
-    for(int j = COL; j < COL + 8; j++)
+  for(int i = row_begin; i < row_begin + 8; i++)
+    for(int j = col_begin; j < col_begin + 8; j++)
       for(int c = 0; c < 3; c++)
         sum_tol[c] += I.at<Vec3b>(i, j)[c];
   
-  for(int i = ROW; i < ROW + 8; i++)
-    for(int j = COL; j < COL + 8; j++)
+  for(int i = row_begin; i < row_begin + 8; i++)
+    for(int j = col_begin; j < col_begin + 8; j++)
       for(int c = 0; c < 3; c++)
         T.at<Vec3b>(i, j)[c] = (float) sum_tol[c] / 64;
 }
 
-Mat averagePool(Mat &I, int STEP) {
+Mat averagePool(Mat &I, int kernel_size) {
   CV_Assert(I.type() == CV_8UC3);
-
-  int n_row = I.rows;
-  int n_col = I.cols;
-  int row_st = 0;
-  int col_st = 0;
-  Mat T = Mat::zeros(n_row, n_col, CV_8UC3);
-  if(n_row % STEP || n_col % STEP) {
-    row_st = (n_row % STEP)>>1;
-    col_st = (n_col % STEP)>>1;
-  }
-
-  for(int i = 0; i < n_row / STEP; i++)
-    for(int j = 0; j < n_col / STEP; j++) {
-      int idx_row = row_st + i * STEP;
-      int idx_col = col_st + j * STEP;
-      averagePoolPixel(T, I, idx_row, idx_col, STEP);
+  Mat T = Mat::zeros(I.size(), CV_8UC3);
+  for(int i = 0; i < I.rows / kernel_size; i++) {
+    for(int j = 0; j < I.cols / kernel_size; j++) {
+      int idx_row = i * kernel_size;
+      int idx_col = j * kernel_size;
+      averagePoolPixel(T, I, idx_row, idx_col, kernel_size);
     }
-
+  }
   return T;
 }
 
 int main() {
-  Mat img = imread("../imagelib/test.jpeg", IMREAD_COLOR);
+  Mat img = imread("../imagelib/imori.jpg", IMREAD_COLOR);
   Mat A = averagePool(img, 8);
   imshow("averagePool", A);
+  imwrite("../imagelib/answer_07.jpg", A);
   waitKey();
   return 0;
 }
