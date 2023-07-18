@@ -13,6 +13,7 @@ main.exe
 main
 demo
 demo[0-9]$
+answer_??
 answer_*.exe
 !answer_*.cpp
 !answer_cpp
