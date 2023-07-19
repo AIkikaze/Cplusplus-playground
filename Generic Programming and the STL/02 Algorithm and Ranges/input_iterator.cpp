@@ -3,8 +3,9 @@
 #include <iterator>
 #include <concepts>
 #include <vector>
+#include <cstdlib>
+#include <cstdio>
 using namespace std;
-
 
 template <typename T>
 struct node {
@@ -19,7 +20,7 @@ struct node {
 // NodeConcept concept to constrain the generic type
 template <typename T>
 concept NodeConcept = requires(T node) {
-  typename T::value_type;
+  // typename T::value_type;
   std::is_same_v<decltype(node.val), typename T::value_type>;
   std::is_same_v<decltype(node.next), T*>;
 };
@@ -32,18 +33,18 @@ template <NodeConcept Node>
 struct node_wrap {
   /// @brief 必要的声明
   using value_type = Node;
-  using reference = Node&;
-  using pointer = Node*;
+  using reference = const Node&;
+  using pointer = const Node*;
   using difference_type = std::ptrdiff_t;
   using iterator_category = std::input_iterator_tag;
 
   Node* ptr;
 
   node_wrap(Node* p = nullptr) : ptr(p) {}
-  Node& operator*() const { return *ptr; }
-  Node* operator->() const { return ptr; }
+  reference operator*() const { return *ptr; }
+  pointer operator->() const { return ptr; }
 
-  node_wrap& operator++() { ptr = ptr->next; return *this; }
+  const node_wrap& operator++() { ptr = ptr->next; return *this; }
   node_wrap operator++(int) { node_wrap tmp = *this; ++*this; return tmp; }
 
   bool operator==(const node_wrap& i) const { return ptr == i.ptr; }
@@ -77,9 +78,9 @@ int main() {
 
   if (result != node_wrap<Node>()) {
     int dist = distance(node_wrap<Node>(head), result);
-    printf("The Result is list[%d] = %d\n", dist, result->val);
+    printf("The result is list[%d] = %d\n", dist, result->val);
   } else {
-    cout << "Not Found" << endl;
+    cout << "Not Found!" << endl;
   }
 
   // 利用适配器, 我们可以使用 auto 关键字来遍历链表
@@ -89,7 +90,7 @@ int main() {
   }
   cout << endl;
 
-  system("pause");
+  // system("pause");
 
   for (auto iter = head; iter != nullptr;) {
     auto tmp = iter->next;
