@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <iterator>
 #include <iostream>
+#include <vector>
 #include <cstdlib>
 using namespace std;
 
@@ -38,6 +39,6 @@ class os_iterator {
 int main() {
   vector<int> v = { 1, 2, 9, 5, 6 };
   copy(v.begin(), v.end(), os_iterator<int>(cout, " "));
-  // system("pause");
+  system("pause");
   return 0;
 }

@@ -90,7 +90,7 @@ int main() {
   }
   cout << endl;
 
-  // system("pause");
+  system("pause");
 
   for (auto iter = head; iter != nullptr;) {
     auto tmp = iter->next;
